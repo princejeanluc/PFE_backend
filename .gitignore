@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+env/
+
+# Django
+*.sqlite3
+*.log
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# Autres
+.env
