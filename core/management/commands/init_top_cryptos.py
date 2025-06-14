@@ -20,7 +20,7 @@ class Command(BaseCommand):
 
         for coin in data:
             obj, created = Crypto.objects.get_or_create(
-                coingecko_id=coin["id"],
+                id=coin["id"],
                 defaults={
                     "name": coin["name"],
                     "symbol": coin["symbol"],

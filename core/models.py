@@ -12,21 +12,43 @@ class Crypto(models.Model):
 
 
 class CryptoInfo(models.Model):
-    crypto = models.ForeignKey(Crypto, on_delete=models.CASCADE, related_name='market_data')  # Association: "have"
-    price_usd = models.DecimalField(max_digits=20, decimal_places=8)
-    volume_24h = models.DecimalField(max_digits=20, decimal_places=2)
-    market_cap_usd = models.DecimalField(max_digits=20, decimal_places=2)
-    percent_change_1h = models.FloatField()
-    percent_change_24h = models.FloatField()
-    percent_change_7d = models.FloatField()
-    circulating_supply = models.DecimalField(max_digits=30, decimal_places=2)
-    total_supply = models.DecimalField(max_digits=30, decimal_places=2)
-    max_supply = models.DecimalField(max_digits=30, decimal_places=2, null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-    timestamp = models.DateTimeField(auto_now_add=True)
+    crypto = models.ForeignKey(Crypto, on_delete=models.CASCADE, related_name='infos')
+    timestamp = models.DateTimeField(null=True, blank=True)
+
+    current_price = models.FloatField(null=True, blank=True)
+    market_cap = models.BigIntegerField(null=True, blank=True)
+    market_cap_rank = models.PositiveIntegerField(null=True, blank=True)
+    fully_diluted_valuation = models.BigIntegerField(null=True, blank=True)
+
+    total_volume = models.BigIntegerField(null=True, blank=True)
+    high_24h = models.FloatField(null=True, blank=True)
+    low_24h = models.FloatField(null=True, blank=True)
+    price_change_24h = models.FloatField(null=True, blank=True)
+    price_change_percentage_24h = models.FloatField(null=True, blank=True)
+    market_cap_change_24h = models.BigIntegerField(null=True, blank=True)
+    market_cap_change_percentage_24h = models.FloatField(null=True, blank=True)
+
+    circulating_supply = models.FloatField(null=True, blank=True)
+    total_supply = models.FloatField(null=True, blank=True)
+    max_supply = models.FloatField(null=True, blank=True)
+
+    ath = models.FloatField(null=True, blank=True)
+    ath_change_percentage = models.FloatField(null=True, blank=True)
+    ath_date = models.DateTimeField(null=True, blank=True)
+
+    atl = models.FloatField(null=True, blank=True)
+    atl_change_percentage = models.FloatField(null=True, blank=True)
+    atl_date = models.DateTimeField(null=True, blank=True)
+
+    last_updated = models.DateTimeField(null=True, blank=True)
+
+    # Champs de gestion du risque
+    volatility_24h = models.FloatField(null=True, blank=True)
+    drawdown_from_ath = models.FloatField(null=True, blank=True)
+    drawup_from_atl = models.FloatField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.crypto.symbol} @ {self.timestamp}"
+        return f"{self.crypto.symbol.upper()} @ {self.timestamp}"
 
 
 class Source(models.Model):
