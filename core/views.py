@@ -3,7 +3,7 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .models import Crypto, CryptoInfo, News
+from .models import Crypto, CryptoInfo, New
 from .serializers import CryptoSerializer, CryptoInfoSerializer, NewsSerializer
 
 class CryptoViewSet(viewsets.ModelViewSet):
@@ -22,7 +22,7 @@ class CryptoInfoViewSet(viewsets.ModelViewSet):
     serializer_class = CryptoInfoSerializer
 
 class NewsViewSet(viewsets.ModelViewSet):
-    queryset = News.objects.all().order_by('-datetime')
+    queryset = New.objects.all().order_by('-datetime')
     serializer_class = NewsSerializer
 
     @action(detail=False, methods=['get'])

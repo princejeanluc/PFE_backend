@@ -21,12 +21,10 @@ class Command(BaseCommand):
         for coin in data:
             obj, created = Crypto.objects.get_or_create(
                 id=coin["id"],
-                defaults={
-                    "name": coin["name"],
-                    "symbol": coin["symbol"],
-                    "image_url": coin["image"],
-                    "market_cap_rank": coin["market_cap_rank"]
-                }
+                name= coin["name"],
+                symbol= coin["symbol"],
+                image_url= coin["image"],
+                slug= coin["id"]
             )
             if created:
                 self.stdout.write(self.style.SUCCESS(f"Ajouté: {coin['name']}"))

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Crypto, CryptoInfo, News, Source
+from .models import Crypto, CryptoInfo, New, Source
 
 class CryptoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,5 +18,5 @@ class SourceSerializer(serializers.ModelSerializer):
 
 class NewsSerializer(serializers.ModelSerializer):
     class Meta:
-        model = News
+        model = New
         fields = '__all__'
