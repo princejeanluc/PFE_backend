@@ -3,12 +3,12 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .models import CryptoCurrency, CryptoInfo, NewsArticle
-from .serializers import CryptoCurrencySerializer, CryptoInfoSerializer, NewsArticleSerializer
+from .models import Crypto, CryptoInfo, News
+from .serializers import CryptoSerializer, CryptoInfoSerializer, NewsSerializer
 
-class CryptoCurrencyViewSet(viewsets.ModelViewSet):
-    queryset = CryptoCurrency.objects.all()
-    serializer_class = CryptoCurrencySerializer
+class CryptoViewSet(viewsets.ModelViewSet):
+    queryset = Crypto.objects.all()
+    serializer_class = CryptoSerializer
 
     @action(detail=True, methods=['get'])
     def info(self, request, pk=None):
@@ -21,9 +21,9 @@ class CryptoInfoViewSet(viewsets.ModelViewSet):
     queryset = CryptoInfo.objects.all()
     serializer_class = CryptoInfoSerializer
 
-class NewsArticleViewSet(viewsets.ModelViewSet):
-    queryset = NewsArticle.objects.all().order_by('-published_at')
-    serializer_class = NewsArticleSerializer
+class NewsViewSet(viewsets.ModelViewSet):
+    queryset = News.objects.all().order_by('-datetime')
+    serializer_class = NewsSerializer
 
     @action(detail=False, methods=['get'])
     def by_crypto(self, request):
@@ -32,6 +32,6 @@ class NewsArticleViewSet(viewsets.ModelViewSet):
             articles = self.queryset.filter(crypto__id=crypto_id)
         else:
             articles = self.queryset
-        serializer = NewsArticleSerializer(articles, many=True)
+        serializer = NewsSerializer(articles, many=True)
         return Response(serializer.data)
 

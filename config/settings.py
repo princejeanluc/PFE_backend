@@ -79,15 +79,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',  # ou mssql si SQL Server
+        'ENGINE': 'mssql',  
         'NAME': 'PFE_DB',
-        'USER': os.get("DB_USER"),
-        'PASSWORD': os.get("DB_PASSWORD"),
-        'HOST': 'sql-server-pfe.database.windows.net',
+        'USER': os.getenv("DB_USER")+"@"+os.getenv("DB_SERVER_NAME"),
+        'PASSWORD': os.getenv("DB_PASSWORD"),
+        'HOST': os.getenv("DB_SERVER_HOST"),
         'PORT': '1433',
         'OPTIONS': {
-            'ssl': {'sslmode': 'require'}  # ou equivalent selon le backend
-        }
+            'driver': 'ODBC Driver 17 for SQL Server',
+        },
     }
 }
 

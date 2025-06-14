@@ -15,7 +15,7 @@ class Command(BaseCommand):
         url = "https://api.coingecko.com/api/v3/coins/markets"
         headers = {"x-cg-demo-api-key":os.getenv('API_CoinGecko'), "accept": "application/json"}
         params = {"vs_currency": "usd", "order": "market_cap_desc", "per_page": 20, "page": 1}
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, headers=headers)
         data = response.json()
 
         for coin in data:

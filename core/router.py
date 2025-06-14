@@ -1,7 +1,7 @@
 from rest_framework import routers
-from .views import CryptoCurrencyViewSet, CryptoInfoViewSet, NewsArticleViewSet
+from .views import CryptoViewSet, CryptoInfoViewSet, NewsViewSet
 
 router = routers.DefaultRouter()
-router.register(r'cryptos', CryptoCurrencyViewSet, basename='cryptos')
+router.register(r'cryptos', CryptoViewSet, basename='cryptos')
 router.register(r'infos', CryptoInfoViewSet, basename='infos')
-router.register(r'news', NewsArticleViewSet, basename='news')
+router.register(r'news', NewsViewSet, basename='news')
