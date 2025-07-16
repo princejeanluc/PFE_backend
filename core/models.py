@@ -65,8 +65,10 @@ class New(models.Model):
     title = models.CharField(max_length=255)
     url = models.URLField()
     datetime = models.DateTimeField()
-    summary = models.TextField()
-    sentiment_score = models.FloatField(null=True, blank=True)  # Nouveau champ
+    summary = models.TextField(default="")
+    #sentiment_score = models.FloatField(null=True, blank=True)  # abandonné
+    positive = models.IntegerField(default=0)
+    negative = models.IntegerField(default=0)
     tags = models.CharField(max_length=255, blank=True, null=True)  # Tags sous forme de texte brut séparé par virgule (améliorable)
 
     def __str__(self):

@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#7&3*9n02bk-8t!04*h(y&v1kaw95-%uxc5snt*i23vnn66m@o'
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -78,17 +78,32 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 DATABASES = {
+    
+    #'default': {
+    #   'ENGINE': 'mssql',  
+    #   'NAME': 'PFE_DB',
+    #   'USER': os.getenv("DB_USER")+"@"+os.getenv("DB_SERVER_NAME"),
+    #   'PASSWORD': os.getenv("DB_PASSWORD"),
+    #   'HOST': os.getenv("DB_SERVER_HOST"),
+    #   'PORT': '1433',
+    #   'OPTIONS': {
+    #       'driver': 'ODBC Driver 18 for SQL Server',
+    #       'extra_params': 'Encrypt=yes;TrustServerCertificate=yes;Connection Timeout=40;',
+    #   },
+    #}
     'default': {
-        'ENGINE': 'mssql',  
-        'NAME': 'PFE_DB',
-        'USER': os.getenv("DB_USER")+"@"+os.getenv("DB_SERVER_NAME"),
-        'PASSWORD': os.getenv("DB_PASSWORD"),
-        'HOST': os.getenv("DB_SERVER_HOST"),
-        'PORT': '1433',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'posa',  # Replace with your MySQL database name
+        'USER': 'root',    # Replace with your MySQL username
+        'PASSWORD': '', # Replace with your MySQL password
+        'HOST': 'localhost',           # Or the IP address/hostname of your MySQL server
+        'PORT': '3306',                # Default MySQL port
         'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-        },
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        }
     }
+
+
 }
 
 # Password validation
