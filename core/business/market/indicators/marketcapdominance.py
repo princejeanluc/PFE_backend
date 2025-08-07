@@ -1,51 +1,92 @@
-from core.business.market.indicators.base import MarketInfoBase
-
+from django.db.models import OuterRef, Subquery, F
+from core.models import Crypto, CryptoInfo, MarketIndicatorSnapshot
+from .base import MarketInfoBase
 
 class MarketCapDominanceIndex(MarketInfoBase):
     def __init__(self, crypto_queryset, top_n=5):
         super().__init__(crypto_queryset)
         self.top_n = top_n
+        self._numeric = None
+        self._value = None
 
     def compute(self):
-        # Extraire les market_caps valides
-        market_caps = [
-            crypto.market_cap
-            for crypto in self.crypto_queryset
-            if crypto.market_cap is not None and crypto.market_cap > 0
-        ]
+        # Sous-requête: dernière market_cap par crypto
+        latest_info_sq = (
+            CryptoInfo.objects
+            .filter(crypto=OuterRef('pk'))
+            .order_by('-timestamp')
+            .values('market_cap')[:1]
+        )
 
-        if len(market_caps) == 0:
-            return "N/A"
+        # Annoter le queryset de cryptos fourni
+        qs = self.crypto_queryset.annotate(
+            latest_market_cap=Subquery(latest_info_sq),
+            sym=F('symbol')
+        ).filter(latest_market_cap__isnull=False)
 
-        # Tri décroissant
-        sorted_caps = sorted(market_caps, reverse=True)
+        caps = [c.latest_market_cap for c in qs if c.latest_market_cap and c.latest_market_cap > 0]
+        if not caps:
+            self._numeric = None
+            self._value = "N/A"
+            return self._value
 
-        top_n = min(self.top_n, len(sorted_caps))
-        top_sum = sum(sorted_caps[:top_n])
-        total_sum = sum(sorted_caps)
+        caps_sorted = sorted(caps, reverse=True)
+        top_sum = sum(caps_sorted[:min(self.top_n, len(caps_sorted))])
+        total_sum = sum(caps_sorted)
 
-        dominance_ratio = top_sum / total_sum
+        if total_sum <= 0:
+            self._numeric = None
+            self._value = "N/A"
+            return self._value
 
-        return round(dominance_ratio, 4)  # Ex: 0.7832 = 78.32%
-
-    def get_label(self):
-        return f"Top {self.top_n} Market Cap Dominance"
+        dominance_pct = round((top_sum / total_sum) * 100, 2)  # en %
+        self._numeric = dominance_pct
+        self._value = f"{dominance_pct:.2f}%"
+        return self._value
 
     def get_flag(self):
-        ratio = self.compute()
-        if ratio == "N/A":
-            return "gray"
-
-        if ratio > 0.75:
-            return "orange"  # Très concentré
-        elif ratio > 0.6:
-            return "yellow"  # Moyennement concentré
+        # 1 = pire (très concentré), 5 = meilleur (diversifié)
+        if self._numeric is None:
+            return 3
+        v = self._numeric
+        if v >= 80:
+            return 1
+        elif v >= 65:
+            return 2
+        elif v >= 50:
+            return 3
+        elif v >= 35:
+            return 4
         else:
-            return "green"   # Diversifié
+            return 5
+
+    def get_label(self):
+        return f"MCDI (Top {self.top_n})"
 
     def get_message(self):
-        ratio = self.compute()
-        if ratio == "N/A":
-            return "Impossible de calculer la dominance du marché (pas de données valides)."
-        pct = round(ratio * 100, 2)
-        return f"Les {self.top_n} premières cryptomonnaies représentent {pct}% de la capitalisation totale du marché."
+        if self._numeric is None:
+            return "Impossible d’évaluer la dominance (données indisponibles)."
+        v = self._numeric
+        if v >= 80:
+            return "Marché très concentré : quelques cryptos captent l’essentiel de la capitalisation."
+        elif v >= 65:
+            return "Marché concentré : poids important des grandes capitalisations."
+        elif v >= 50:
+            return "Concentration modérée du marché."
+        elif v >= 35:
+            return "Concentration faible : capitalisation relativement répartie."
+        else:
+            return "Marché bien diversifié : faible concentration du Top."
+
+    def save_snapshot(self):
+        if self._value is None:
+            self.compute()
+        MarketIndicatorSnapshot.objects.update_or_create(
+            name=self.get_label(),  # on enregistre sous un label lisible
+            defaults={
+                "value": self._value,
+                "numeric_value": self._numeric,
+                "flag": self.get_flag(),
+                "message": self.get_message(),
+            }
+        )

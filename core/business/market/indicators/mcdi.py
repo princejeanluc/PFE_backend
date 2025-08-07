@@ -1,57 +1,92 @@
-from core.models import CryptoInfo
+from django.db.models import OuterRef, Subquery
+from core.models import CryptoInfo, MarketIndicatorSnapshot
 from .base import MarketInfoBase
-from datetime import datetime, timedelta
 
 class MCDIIndicator(MarketInfoBase):
-    def __init__(self, crypto_queryset):
+    """
+    Market Cap Dominance Index (Top N dominance en %).
+    Mesure la part de capitalisation captée par les N plus grosses cryptos.
+    Plus c'est élevé, plus le marché est concentré (donc 'pire' pour la diversification).
+    """
+    def __init__(self, crypto_queryset, top_n=5):
         super().__init__(crypto_queryset)
-        self.top_n = 5  # configurable si besoin
-        self.result = None  # on stocke le résultat pour l'utiliser dans get_flag et get_message
+        self.top_n = top_n
+        self._numeric = None
+        self._value = None
 
     def compute(self):
-        # Récupérer les dernières données (par exemple aujourd'hui ou hier)
-        latest_date = CryptoInfo.objects.latest("timestamp").timestamp.date()
-        data = CryptoInfo.objects.filter(timestamp__date=latest_date)
+        # Dernière market_cap par crypto (pas d'hypothèse d'un timestamp commun)
+        latest_cap_sq = (CryptoInfo.objects
+                         .filter(crypto=OuterRef('pk'))
+                         .order_by('-timestamp')
+                         .values('market_cap')[:1])
 
-        total_market_cap = sum(item.market_cap for item in data if item.market_cap)
-        top_cryptos = sorted(data, key=lambda x: x.market_cap or 0, reverse=True)[:self.top_n]
-        top_market_cap = sum(item.market_cap for item in top_cryptos if item.market_cap)
+        # On annote le queryset passé au constructeur (meilleur contrôle que Crypto.objects.all())
+        qs = self.crypto_queryset.annotate(latest_market_cap=Subquery(latest_cap_sq))\
+                                 .filter(latest_market_cap__isnull=False)
 
-        if total_market_cap == 0:
-            self.result = None
-        else:
-            self.result = round((top_market_cap / total_market_cap) * 100, 2)
+        caps = [c.latest_market_cap for c in qs if c.latest_market_cap and c.latest_market_cap > 0]
+        if not caps:
+            self._numeric = None
+            self._value = "N/A"
+            return self._value
 
-        return self.result
+        caps.sort(reverse=True)
+        top_sum = sum(caps[:min(self.top_n, len(caps))])
+        total_sum = sum(caps)
+        if total_sum <= 0:
+            self._numeric = None
+            self._value = "N/A"
+            return self._value
+
+        dominance_pct = round((top_sum / total_sum) * 100, 2)  # en %
+        self._numeric = dominance_pct
+        self._value = f"{dominance_pct:.2f}%"
+        return self._value
 
     def get_flag(self):
-        if self.result is None:
-            return 0
-        if self.result >= 80:
-            return 5  # Très concentré
-        elif self.result >= 65:
-            return 4  # Concentré
-        elif self.result >= 50:
-            return 3  # Moyennement concentré
-        elif self.result >= 35:
-            return 2  # Légèrement concentré
+        # 1 = pire (très concentré), 5 = meilleur (diversifié)
+        if self._numeric is None:
+            return 3  # neutre par défaut si on ne sait pas
+        v = self._numeric
+        if v >= 80:
+            return 1
+        elif v >= 65:
+            return 2
+        elif v >= 50:
+            return 3
+        elif v >= 35:
+            return 4
         else:
-            return 1  # Très diversifié
+            return 5
 
     def get_label(self):
-        return "MCDI"
+        return f"MCDI (Top {self.top_n})"
 
     def get_message(self):
-        if self.result is None:
+        if self._numeric is None:
             return "La concentration du marché n'a pas pu être évaluée."
-
-        if self.result >= 80:
-            return "Le marché est très concentré autour de quelques cryptomonnaies dominantes."
-        elif self.result >= 65:
-            return "Le marché est concentré, dominé par les grandes capitalisations."
-        elif self.result >= 50:
-            return "Le marché est moyennement concentré."
-        elif self.result >= 35:
-            return "Le marché est légèrement concentré, avec une certaine diversité."
+        v = self._numeric
+        if v >= 80:
+            return "Marché très concentré : quelques cryptomonnaies dominent largement."
+        elif v >= 65:
+            return "Marché concentré : poids important des grandes capitalisations."
+        elif v >= 50:
+            return "Concentration modérée du marché."
+        elif v >= 35:
+            return "Concentration faible : capitalisation relativement répartie."
         else:
-            return "Le marché est bien diversifié, aucune crypto ne domine excessivement."
+            return "Marché bien diversifié : faible dominance du Top."
+
+    def save_snapshot(self):
+        if self._value is None:
+            self.compute()
+        MarketIndicatorSnapshot.objects.update_or_create(
+            name=self.get_label(),
+            defaults={
+                "value": self._value,
+                "numeric_value": self._numeric,
+                "flag": self.get_flag(),
+                "message": self.get_message(),
+            }
+        )

@@ -13,16 +13,14 @@ from typing import List
 class MarketInfoManager:
     def __init__(self):
         self.cryptos = Crypto.objects.all()
-        self.indicators  : List[MarketInfoBase]   = [
-            VolatilityInfo(self.cryptos),
-            TopCryptoVariationInfo(self.cryptos),
-            VMRIndicator(self.cryptos),
-            UpwardTrendInfo(self.cryptos),
-            PDIIndicator(self.cryptos),
-            BTCDominanceInfo(self.cryptos),
-            DeclineCountInfo(self.cryptos)
-            
-            # Ajoute ReturnInfo, MarketCapInfo, etc.
+        self.indicator_classes = [
+            VolatilityInfo,
+            TopCryptoVariationInfo,
+            VMRIndicator,
+            UpwardTrendInfo,
+            PDIIndicator,
+            BTCDominanceInfo,
+            DeclineCountInfo,
         ]
 
     def get_all_indicators(self):
