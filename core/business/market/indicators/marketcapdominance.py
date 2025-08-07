@@ -1,5 +1,3 @@
-
-
 from core.business.market.indicators.base import MarketInfoBase
 
 

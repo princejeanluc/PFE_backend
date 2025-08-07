@@ -191,4 +191,13 @@ class ExogeneousVariables(models.Model):
         return f"Exogeneous variable {self.name} for  {self.crypto.name} at {self.timestamp}"
     
 
+class MarketIndicatorSnapshot(models.Model):
+    name = models.CharField(max_length=100)  # Nom de l'indicateur
+    value = models.CharField(max_length=255)  # Ex : "3.25%", "N/A"
+    numeric_value = models.FloatField(null=True, blank=True)  # Pour analyse sérieuse
+    flag = models.IntegerField()  # De 1 à 5
+    message = models.TextField()
+    updated_at = models.DateTimeField(auto_now=True)  # Dernière mise à jour
 
+    def __str__(self):
+        return f"{self.name} ({self.updated_at.strftime('%Y-%m-%d %H:%M')})"

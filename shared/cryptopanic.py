@@ -123,14 +123,15 @@ def scroll_and_collect(driver, articles_seen, news_list):
         try:
             title_el = art.find_element(By.CSS_SELECTOR, ".nc-title")
             title_text = clean_text(title_el.text.strip())
-            link = title_el.get_attribute("href")
+            a = art.find_element(By.CSS_SELECTOR, "a")
+            link = a.get_attribute("href")
             if not title_text or "sponsored" in title_text.lower() or link in articles_seen:
                 continue
 
             datetime_el = art.find_element(By.CSS_SELECTOR, ".nc-date time")
             datetime_str = datetime_el.get_attribute("datetime") if datetime_el else None
 
-            source_el = art.find_element(By.CSS_SELECTOR, ".si-source-domain")
+            source_el = art.find_element(By.CSS_SELECTOR, ".si-source-name")
             source = source_el.text if source_el else None
 
             cryptos = [

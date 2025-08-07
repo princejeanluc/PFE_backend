@@ -1,5 +1,5 @@
 from .base import MarketInfoBase
-from core.models import CryptoInfo
+from core.models import CryptoInfo, MarketIndicatorSnapshot
 from django.utils.timezone import now, timedelta
 
 class DeclineCountInfo(MarketInfoBase):
@@ -9,7 +9,7 @@ class DeclineCountInfo(MarketInfoBase):
         time_now = now()
         time_24h_ago = time_now - timedelta(hours=24)
 
-        self._decline_count = 0
+        decline_count = 0
 
         for crypto in self.crypto_queryset:
             infos = (
@@ -18,40 +18,64 @@ class DeclineCountInfo(MarketInfoBase):
                 .order_by("timestamp")
             )
 
-            if infos.count() >= 2:
-                first_price = infos.first().current_price
-                last_price = infos.last().current_price
+            if infos.exists():
+                first = infos.first()
+                last = infos.last()
 
-                if first_price and last_price and first_price > 0:
-                    change_pct = ((first_price - last_price) / first_price) * 100
+                if first and last and first.current_price and last.current_price and first.current_price > 0:
+                    change_pct = ((first.current_price - last.current_price) / first.current_price) * 100
                     if change_pct >= self.THRESHOLD:
-                        self._decline_count += 1
+                        decline_count += 1
 
-        return str(self._decline_count)
+        self._decline_count = decline_count
+        self._numeric = decline_count
+        self._value = str(decline_count)
+        return self._value
 
     def get_flag(self):
-        if self._decline_count > 20:
-            return 5
-        elif self._decline_count > 10:
-            return 4
-        elif self._decline_count > 5:
-            return 3
-        elif self._decline_count > 2:
+        if not hasattr(self, "_decline_count"):
+            self.compute()
+
+        count = self._decline_count
+        if count > 20:
+            return 1  # très mauvaise situation
+        elif count > 10:
             return 2
-        return 1
+        elif count > 5:
+            return 3
+        elif count > 2:
+            return 4
+        return 5  # bon : très peu de chutes
 
     def get_label(self):
         return f"Chutes > {self.THRESHOLD}%"
 
     def get_message(self):
-        if self._decline_count == 0:
+        count = getattr(self, "_decline_count", None)
+        if count is None:
+            return "Aucune donnée disponible."
+        elif count == 0:
             return "Aucune crypto en forte chute."
-        elif self._decline_count <= 2:
+        elif count <= 2:
             return "Très peu de cryptos en forte baisse."
-        elif self._decline_count <= 5:
+        elif count <= 5:
             return "Quelques cryptos montrent une chute significative."
-        elif self._decline_count <= 10:
+        elif count <= 10:
             return "Plusieurs cryptos sont en forte baisse."
-        elif self._decline_count <= 20:
+        elif count <= 20:
             return "Nombre important de cryptos en forte chute."
         return "Chute généralisée sur le marché crypto."
+
+    def save_snapshot(self):
+        if not hasattr(self, "_value"):
+            self.compute()
+
+        MarketIndicatorSnapshot.objects.update_or_create(
+            name=self.__class__.__name__,
+            defaults={
+                "value": self._value,
+                "numeric_value": self._numeric,
+                "flag": self.get_flag(),
+                "message": self.get_message(),
+            }
+        )
