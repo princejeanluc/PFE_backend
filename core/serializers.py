@@ -128,3 +128,26 @@ class CryptoTopSerializer(serializers.Serializer):
     current_price = serializers.FloatField()
     price_change_24h = serializers.FloatField()
     market_cap = serializers.IntegerField()
+
+class OptionPricingInputSerializer(serializers.Serializer):
+    symbol = serializers.CharField()
+    option_type = serializers.ChoiceField(choices=["call", "put"])
+    strike = serializers.FloatField(min_value=0)
+    risk_free = serializers.FloatField(required=False, default=0.0)  # annuel (ex 0.02)
+    # soit horizon_hours, soit (current_date, maturity_date)
+    horizon_hours = serializers.IntegerField(required=False, min_value=1, max_value=24*7)
+    current_date = serializers.DateTimeField(required=False)
+    maturity_date = serializers.DateTimeField(required=False)
+    n_sims = serializers.IntegerField(required=False, min_value=100, max_value=2000, default=1000)
+
+    def validate(self, attrs):
+        # horizon_hours direct ?
+        h = attrs.get("horizon_hours")
+        cur = attrs.get("current_date")
+        mat = attrs.get("maturity_date")
+        if h is None:
+            if cur is None or mat is None:
+                raise serializers.ValidationError(
+                    "Provide either 'horizon_hours' or both 'current_date' and 'maturity_date'."
+                )
+        return attrs

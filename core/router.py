@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CryptoHistoryView, CryptoMapView, CryptoRelationMatrixView, CryptoViewSet, CryptoInfoViewSet, CurrentUserView, GoogleAuthTokenView, LatestCryptoInfoView, MarketIndicatorsView,  MarketSnapshotViewSet,
+    CryptoHistoryView, CryptoMapView, CryptoRelationMatrixView, CryptoViewSet, CryptoInfoViewSet, CurrentUserView, GoogleAuthTokenView, LatestCryptoInfoView, MarketIndicatorsView,  MarketSnapshotViewSet, OptionPricingView,
     PortfolioViewSet, HoldingViewSet,
     NewViewSet, PosaUserViewSet, PredictionViewSet, RegisterView, RiskSimulationView
 )
@@ -49,6 +49,7 @@ urlpatterns += [
     path("crypto-relations/", CryptoRelationMatrixView.as_view(), name="crypto-relations"),
     path("crypto-map/", CryptoMapView.as_view(), name="crypto-map"),
     path("risk/simulate/", RiskSimulationView.as_view(), name="risk-simulate"),
+    path("risk/option/price/", OptionPricingView.as_view(), name="option-price"),
 
 
 ] 

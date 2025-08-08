@@ -5,10 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from core.business.market.manager import MarketInfoManager
+from core.business.risk.pricing import OptionPricingParams, price_option_mc
 from core.business.simulation.allocation import create_performance_series, initialize_quantities, run_markowitz_allocation
 from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction
 from .serializers import (
-    CryptoSerializer, CryptoInfoSerializer, CryptoTopSerializer, CryptoWithLatestInfoSerializer, MarketSnapshotSerializer,
+    CryptoSerializer, CryptoInfoSerializer, CryptoTopSerializer, CryptoWithLatestInfoSerializer, MarketSnapshotSerializer, OptionPricingInputSerializer,
     PortfolioSerializer, HoldingSerializer,
     NewSerializer, PortfolioWithHoldingsSerializer, PosaUserSerializer, PredictionSerializer, RegisterSerializer
 )
@@ -592,3 +593,76 @@ class RiskSimulationView(APIView):
             "metrics": metrics
         }
         return Response(resp, status=200)
+
+class OptionPricingView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        ser = OptionPricingInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        payload = ser.validated_data
+
+        # 1) construire horizon_hours si dates fournies
+        horizon_hours = payload.get("horizon_hours")
+        if horizon_hours is None:
+            cur = payload["current_date"]
+            mat = payload["maturity_date"]
+            delta = mat - cur
+            horizon_hours = max(1, int(delta.total_seconds() // 3600))
+
+        # 2) récupérer 6 mois d'historique (médiane horaire)
+        try:
+            crypto = Crypto.objects.get(symbol=payload["symbol"])
+        except Crypto.DoesNotExist:
+            return Response({"error": "Crypto not found"}, status=404)
+
+        since = now() - timedelta(days=180)
+        qs = CryptoInfo.objects.filter(
+            crypto=crypto,
+            timestamp__gte=since,
+            current_price__isnull=False
+        ).order_by("timestamp")
+
+        if not qs.exists():
+            return Response({"error": "No data for this crypto"}, status=404)
+
+        df = pd.DataFrame([{"timestamp": r.timestamp, "price": r.current_price} for r in qs])
+        df_hourly = to_hourly_median(df)  # 1H median + dropna
+        if len(df_hourly) < 50:
+            return Response({"error": "Not enough hourly data"}, status=400)
+
+        # 3) paramètres & pricing
+        params = OptionPricingParams(
+            symbol=payload["symbol"],
+            option_type=payload["option_type"].lower(),
+            strike=float(payload["strike"]),
+            risk_free=float(payload.get("risk_free", 0.0)),
+            horizon_hours=int(horizon_hours),
+            n_sims=int(payload.get("n_sims", 1000)),
+        )
+
+        # Cap de sécurité côté vue aussi
+        params.n_sims = min(max(params.n_sims, 100), 2000)
+        params.horizon_hours = min(max(params.horizon_hours, 1), 24*7)
+
+        try:
+            result = price_option_mc(df_hourly, params)
+        except Exception as e:
+            # Message lisible côté front (et tu peux journaliser le détail côté serveur)
+            return Response({"error": f"Pricing failed: {str(e)}"}, status=503)
+
+        return Response({
+            "symbol": params.symbol,
+            "option_type": params.option_type,
+            "strike": params.strike,
+            "risk_free": params.risk_free,
+            "horizon_hours": params.horizon_hours,
+            "n_sims": params.n_sims,
+            "price": result["price"],
+            "ci95": result["ci95"],
+            "stderr": result["stderr"],
+            "diagnostics": {
+                "model_used": result["model_used"],
+                "last_price": result["last_price"],
+            }
+        }, status=200)
