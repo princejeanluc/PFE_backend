@@ -43,7 +43,10 @@ User = get_user_model()
 import umap
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
-
+from core.business.risk.simulate import (
+    RiskSimParams, to_hourly_median, log_returns_pct,
+    simulate_with_ngarch, compute_metrics_from_paths, build_history_for_response
+)
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
     serializer_class = RegisterSerializer
@@ -517,3 +520,75 @@ class LatestCryptoInfoView(generics.ListAPIView):
 
 
 
+class RiskSimulationView(APIView):
+    # permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """
+        Query params:
+          - symbol: str (ex: BTC)
+          - horizon_hours: int (<= 72 recommandé)
+          - n_sims: int (ex: 200)
+        """
+        symbol = request.query_params.get("symbol")
+        horizon_hours = int(request.query_params.get("horizon_hours", 72))
+        n_sims = int(request.query_params.get("n_sims", 200))
+
+        if not symbol:
+            return Response({"error": "Missing symbol"}, status=400)
+
+        # 1) Historique: 6 mois glissants, prix horaires (médiane)
+        since = now() - timedelta(days=180)
+
+        try:
+            crypto = Crypto.objects.get(symbol=symbol)
+        except Crypto.DoesNotExist:
+            return Response({"error": "Crypto not found"}, status=404)
+
+        qs = CryptoInfo.objects.filter(
+            crypto=crypto, timestamp__gte=since, current_price__isnull=False
+        ).order_by("timestamp")
+
+        if not qs.exists():
+            return Response({"error": "No data for this crypto"}, status=404)
+
+        df = pd.DataFrame([{"timestamp": r.timestamp, "price": r.current_price} for r in qs])
+        df_hourly = to_hourly_median(df)  # 1H median + dropna
+
+        if len(df_hourly) < 50:
+            return Response({"error": "Not enough hourly data"}, status=400)
+
+        # 2) log-return (%) = ln(Pt/Pt-1)*100
+        lr_pct = log_returns_pct(df_hourly["price"])
+        last_price = float(df_hourly["price"].iloc[-1])
+
+        # 3) NGARCH + loi mixte → simulate (à brancher dans simulate_with_ngarch)
+        try:
+            paths, vol = simulate_with_ngarch(
+                logret_pct=lr_pct.values,
+                last_price=last_price,
+                horizon_hours=horizon_hours,
+                n_sims=n_sims
+            )
+        except Exception as e:
+            raise e
+            return Response({"error": f"Simulation failed: {e}"}, status=500)
+
+        # 4) métriques sur distribution terminale
+        metrics = compute_metrics_from_paths(paths)
+
+        # 5) format de réponse
+        t0 = df_hourly.index[-1]
+        forecast_index = pd.date_range(t0 + pd.Timedelta(hours=1), periods=horizon_hours, freq="1H")
+
+        history_payload = build_history_for_response(df_hourly, keep_last_hours=24*3)
+
+        resp = {
+            "symbol": crypto.symbol,
+            "history": history_payload,
+            "forecast_timestamps": [ts.isoformat() for ts in forecast_index.to_pydatetime()],
+            "paths": paths.tolist(),    # n_sims x T
+            "vol": [float(v) for v in vol],   # T
+            "metrics": metrics
+        }
+        return Response(resp, status=200)

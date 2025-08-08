@@ -5,7 +5,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CryptoHistoryView, CryptoMapView, CryptoRelationMatrixView, CryptoViewSet, CryptoInfoViewSet, CurrentUserView, GoogleAuthTokenView, LatestCryptoInfoView, MarketIndicatorsView,  MarketSnapshotViewSet,
     PortfolioViewSet, HoldingViewSet,
-    NewViewSet, PosaUserViewSet, PredictionViewSet, RegisterView
+    NewViewSet, PosaUserViewSet, PredictionViewSet, RegisterView, RiskSimulationView
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -48,6 +48,8 @@ urlpatterns += [
     path("market/history/", CryptoHistoryView.as_view(), name="crypto-history"),
     path("crypto-relations/", CryptoRelationMatrixView.as_view(), name="crypto-relations"),
     path("crypto-map/", CryptoMapView.as_view(), name="crypto-map"),
+    path("risk/simulate/", RiskSimulationView.as_view(), name="risk-simulate"),
+
 
 ] 
 
