@@ -8,6 +8,8 @@ class MCDIIndicator(MarketInfoBase):
     Mesure la part de capitalisation captée par les N plus grosses cryptos.
     Plus c'est élevé, plus le marché est concentré (donc 'pire' pour la diversification).
     """
+    WINDOW = None  # Instantané (pas de fenêtre temporelle glissante)
+
     def __init__(self, crypto_queryset, top_n=5):
         super().__init__(crypto_queryset)
         self.top_n = top_n

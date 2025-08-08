@@ -1,74 +1,94 @@
 from core.models import CryptoInfo, MarketIndicatorSnapshot
 from .base import MarketInfoBase
-from datetime import timedelta
-from django.utils.timezone import now
+from django.utils.timezone import now, timedelta
 import numpy as np
 import math
-from collections import defaultdict
 
 class VolatilityInfo(MarketInfoBase):
     """
     Volatilité sur les dernières 24h (écart-type des rendements log),
-    annualisé sur base 24h.
+    annualisé-like sur base 24 (sqrt(24)).
     """
+    WINDOW_HOURS = 24  # fenêtre explicite
+
     def __init__(self, crypto_queryset):
         super().__init__(crypto_queryset)
         self._numeric = None
         self._value = None
 
     def compute(self):
-        time_threshold = now() - timedelta(days=1)
+        time_threshold = now() - timedelta(hours=self.WINDOW_HOURS)
 
-        # Récupérer toutes les observations récentes
-        recent_infos = (
+        # Requête allégée: on ne ramène que (crypto_id, price) triés
+        rows = (
             CryptoInfo.objects
-            .filter(timestamp__gte=time_threshold, current_price__isnull=False)
-            .filter(crypto__in=self.crypto_queryset)
-            .order_by('crypto', 'timestamp')
+            .filter(
+                timestamp__gte=time_threshold,
+                current_price__isnull=False,
+                crypto__in=self.crypto_queryset,
+            )
+            .order_by('crypto_id', 'timestamp')
+            .values_list('crypto_id', 'current_price')
         )
 
-        prices_by_crypto = defaultdict(list)
-        for info in recent_infos:
-            prices_by_crypto[info.crypto.symbol].append(info.current_price)
-
         returns = []
-        for price_list in prices_by_crypto.values():
-            if len(price_list) < 2:
+        last_price = None
+        last_crypto = None
+
+        for crypto_id, price in rows.iterator(chunk_size=2000):
+            if last_crypto != crypto_id:
+                # on change de crypto
+                last_crypto = crypto_id
+                last_price = price
                 continue
-            for p0, p1 in zip(price_list[:-1], price_list[1:]):
-                if p0 > 0 and p1 > 0:
-                    returns.append(math.log(p1 / p0))
+            # même crypto: calcul du log-return si données valides
+            if last_price and price and last_price > 0 and price > 0:
+                returns.append(math.log(price / last_price))
+            last_price = price
 
         if not returns:
             self._numeric = None
             self._value = "N/A"
             return self._value
 
-        vol = np.std(returns) * np.sqrt(24)  # "annualisation" sur 24h
+        vol = float(np.std(returns) * np.sqrt(24))
         self._numeric = vol
         self._value = f"{vol:.2%}"
         return self._value
 
     def get_flag(self):
-        if self._numeric is None:
-            return 3  # neutre
-        if self._numeric > 0.10:
-            return 1  # élevé
-        elif self._numeric > 0.05:
-            return 2  # modéré
-        return 3  # faible
+        # 1 = pire (volatilité très élevée), 5 = meilleur (très faible)
+        v = getattr(self, "_numeric", None)
+        if v is None:
+            return 3  # neutre si inconnu
+        if v > 0.10:
+            return 1
+        elif v > 0.06:
+            return 2
+        elif v > 0.03:
+            return 3
+        elif v > 0.01:
+            return 4
+        else:
+            return 5
 
     def get_label(self):
         return "Volatilité"
 
     def get_message(self):
-        if self._numeric is None:
+        v = getattr(self, "_numeric", None)
+        if v is None:
             return "Volatilité non calculable (pas assez de données)."
-        if self._numeric > 0.10:
+        if v > 0.10:
             return "Volatilité élevée : prudence recommandée."
-        elif self._numeric > 0.05:
+        elif v > 0.06:
             return "Volatilité modérée : surveillez le marché."
-        return "Volatilité faible : marché stable."
+        elif v > 0.03:
+            return "Volatilité contenue : conditions assez stables."
+        elif v > 0.01:
+            return "Volatilité faible : marché plutôt stable."
+        else:
+            return "Volatilité très faible : marché calme."
 
     def save_snapshot(self):
         if self._value is None:

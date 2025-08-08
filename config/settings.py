@@ -209,3 +209,5 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),                  # Format d’en-tête : Bearer <token>
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',          # Nom du header
 }
+
+STATIC_ROOT = "static"

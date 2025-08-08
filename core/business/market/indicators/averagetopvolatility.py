@@ -3,21 +3,23 @@ from core.models import CryptoInfo, MarketIndicatorSnapshot
 from datetime import timedelta
 from django.utils.timezone import now
 import numpy as np
-import math
 from collections import defaultdict
 
 class AverageTopVolatilityInfo(MarketInfoBase):
+    WINDOW_DAYS = 30  # Fenêtre optimale pour cet indicateur
+    RECENT_HOURS = 12  # Fenêtre pour déterminer le top 10
+
     def compute(self):
         now_time = now()
-        time_threshold = now_time - timedelta(days=30)
-        recent_cutoff = now_time - timedelta(hours=12)
+        time_threshold = now_time - timedelta(days=self.WINDOW_DAYS)
+        recent_cutoff = now_time - timedelta(hours=self.RECENT_HOURS)
 
-        # Étape 1 : récupérer les dernières market_cap par crypto
+        # Étape 1 : récupérer les dernières market_cap par crypto (sur fenêtre récente)
         latest_infos = (
             CryptoInfo.objects
             .filter(timestamp__gte=recent_cutoff, market_cap__isnull=False)
             .order_by('crypto', '-timestamp')
-            .distinct('crypto')  # nécessite backend PostgreSQL
+            .distinct('crypto')  # PostgreSQL requis
         )
 
         latest_market_cap = {}
@@ -26,11 +28,11 @@ class AverageTopVolatilityInfo(MarketInfoBase):
             if symbol not in latest_market_cap:
                 latest_market_cap[symbol] = (info.market_cap, info.crypto)
 
-        # Trie et sélection du top 10
+        # Top 10 par market_cap
         top_cryptos = sorted(latest_market_cap.items(), key=lambda x: x[1][0], reverse=True)[:10]
         top_symbols = {crypto.symbol for _, (_, crypto) in top_cryptos}
 
-        # Étape 2 : récupérer les prix sur 30 jours pour ces cryptos
+        # Étape 2 : récupérer les prix sur la fenêtre
         recent_infos = (
             CryptoInfo.objects
             .filter(timestamp__gte=time_threshold, current_price__isnull=False)
@@ -65,19 +67,19 @@ class AverageTopVolatilityInfo(MarketInfoBase):
 
     def get_flag(self):
         if self._numeric is None:
-            return 3  # par défaut : neutre
+            return 3  # neutre
 
         v = self._numeric
         if v > 0.10:
-            return 1  # trop élevé
+            return 1
         elif v > 0.06:
-            return 2  # élevé
+            return 2
         elif v > 0.03:
-            return 3  # modéré
+            return 3
         elif v > 0.01:
-            return 4  # faible
+            return 4
         else:
-            return 5  # très faible
+            return 5
 
     def get_label(self):
         return "Volatilité moyenne du Top 10"
@@ -97,9 +99,8 @@ class AverageTopVolatilityInfo(MarketInfoBase):
             return "Stabilité relative dans le top crypto."
         else:
             return "Très faible volatilité parmi les cryptos dominantes."
-        
+
     def save_snapshot(self):
-        # Vérifie que le calcul a été effectué
         if not hasattr(self, "_value"):
             self.compute()
 

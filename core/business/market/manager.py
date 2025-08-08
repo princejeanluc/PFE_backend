@@ -15,11 +15,11 @@ class MarketInfoManager:
         self.cryptos = Crypto.objects.all()
         self.indicator_classes = [
             VolatilityInfo,
-            TopCryptoVariationInfo,
-            VMRIndicator,
-            UpwardTrendInfo,
+            #TopCryptoVariationInfo,
+            #VMRIndicator,
+            #UpwardTrendInfo,
             PDIIndicator,
-            BTCDominanceInfo,
+            #BTCDominanceInfo,
             DeclineCountInfo,
         ]
 

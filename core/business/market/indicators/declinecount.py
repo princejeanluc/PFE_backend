@@ -3,18 +3,19 @@ from core.models import CryptoInfo, MarketIndicatorSnapshot
 from django.utils.timezone import now, timedelta
 
 class DeclineCountInfo(MarketInfoBase):
-    THRESHOLD = 10  # % de chute pour être considéré comme "forte chute"
+    WINDOW_HOURS = 24  # Fenêtre de comparaison en heures
+    THRESHOLD = 10     # % de chute pour être considéré comme "forte chute"
 
     def compute(self):
         time_now = now()
-        time_24h_ago = time_now - timedelta(hours=24)
+        time_start = time_now - timedelta(hours=self.WINDOW_HOURS)
 
         decline_count = 0
 
         for crypto in self.crypto_queryset:
             infos = (
                 CryptoInfo.objects
-                .filter(crypto=crypto, timestamp__range=(time_24h_ago, time_now))
+                .filter(crypto=crypto, timestamp__range=(time_start, time_now))
                 .order_by("timestamp")
             )
 
@@ -38,14 +39,14 @@ class DeclineCountInfo(MarketInfoBase):
 
         count = self._decline_count
         if count > 20:
-            return 1  # très mauvaise situation
+            return 1
         elif count > 10:
             return 2
         elif count > 5:
             return 3
         elif count > 2:
             return 4
-        return 5  # bon : très peu de chutes
+        return 5
 
     def get_label(self):
         return f"Chutes > {self.THRESHOLD}%"

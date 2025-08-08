@@ -1,8 +1,12 @@
 from django.db.models import OuterRef, Subquery, F
 from core.models import Crypto, CryptoInfo, MarketIndicatorSnapshot
 from .base import MarketInfoBase
+from heapq import nlargest
 
 class MarketCapDominanceIndex(MarketInfoBase):
+    # Fenêtre: instantané (photo du marché)
+    WINDOW = None
+
     def __init__(self, crypto_queryset, top_n=5):
         super().__init__(crypto_queryset)
         self.top_n = top_n
@@ -18,28 +22,34 @@ class MarketCapDominanceIndex(MarketInfoBase):
             .values('market_cap')[:1]
         )
 
-        # Annoter le queryset de cryptos fourni
-        qs = self.crypto_queryset.annotate(
-            latest_market_cap=Subquery(latest_info_sq),
-            sym=F('symbol')
-        ).filter(latest_market_cap__isnull=False)
+        # Annoter le queryset fourni (on ne scanne pas tout le marché)
+        qs = (
+            self.crypto_queryset
+            .annotate(
+                latest_market_cap=Subquery(latest_info_sq),
+                sym=F('symbol')
+            )
+            .filter(latest_market_cap__isnull=False)
+        )
 
+        # Extraire uniquement les caps valides (>0)
         caps = [c.latest_market_cap for c in qs if c.latest_market_cap and c.latest_market_cap > 0]
         if not caps:
             self._numeric = None
             self._value = "N/A"
             return self._value
 
-        caps_sorted = sorted(caps, reverse=True)
-        top_sum = sum(caps_sorted[:min(self.top_n, len(caps_sorted))])
-        total_sum = sum(caps_sorted)
+        # Top-N sans trier toute la liste
+        top_vals = nlargest(min(self.top_n, len(caps)), caps)
+        top_sum = sum(top_vals)
+        total_sum = sum(caps)
 
         if total_sum <= 0:
             self._numeric = None
             self._value = "N/A"
             return self._value
 
-        dominance_pct = round((top_sum / total_sum) * 100, 2)  # en %
+        dominance_pct = round((top_sum / total_sum) * 100, 2)  # %
         self._numeric = dominance_pct
         self._value = f"{dominance_pct:.2f}%"
         return self._value
@@ -82,7 +92,7 @@ class MarketCapDominanceIndex(MarketInfoBase):
         if self._value is None:
             self.compute()
         MarketIndicatorSnapshot.objects.update_or_create(
-            name=self.get_label(),  # on enregistre sous un label lisible
+            name=self.get_label(),
             defaults={
                 "value": self._value,
                 "numeric_value": self._numeric,

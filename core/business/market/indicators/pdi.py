@@ -7,6 +7,8 @@ class PDIIndicator(MarketInfoBase):
     Price Dispersion Indicator : mesure l'écart-type relatif des prix
     entre cryptos, en pourcentage de la moyenne.
     """
+    WINDOW = None  # Instantané (dernière valeur par crypto)
+
     def __init__(self, crypto_queryset):
         super().__init__(crypto_queryset)
         self._numeric = None  # valeur numérique (%)
@@ -19,9 +21,9 @@ class PDIIndicator(MarketInfoBase):
                            .order_by('-timestamp')
                            .values('current_price')[:1])
 
-        qs = self.crypto_queryset.annotate(latest_price=Subquery(latest_price_sq))\
-                                 .filter(latest_price__isnull=False,
-                                         latest_price__gt=0)
+        qs = (self.crypto_queryset
+              .annotate(latest_price=Subquery(latest_price_sq))
+              .filter(latest_price__isnull=False, latest_price__gt=0))
 
         prices = [c.latest_price for c in qs]
         if not prices:

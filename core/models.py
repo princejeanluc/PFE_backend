@@ -27,10 +27,10 @@ class Crypto(models.Model):
 
 
 class CryptoInfo(models.Model):
-    crypto = models.ForeignKey(Crypto, on_delete=models.CASCADE, related_name='infos')
-    timestamp = models.DateTimeField(null=True, blank=True)
+    crypto = models.ForeignKey(Crypto, on_delete=models.CASCADE, related_name='infos', db_index=True)
+    timestamp = models.DateTimeField(null=True, blank=True , db_index=True)
 
-    current_price = models.FloatField(null=True, blank=True)
+    current_price = models.FloatField(null=True, blank=True, db_index=True)
     market_cap = models.BigIntegerField(null=True, blank=True)
     market_cap_rank = models.PositiveIntegerField(null=True, blank=True)
     fully_diluted_valuation = models.BigIntegerField(null=True, blank=True)
@@ -64,6 +64,15 @@ class CryptoInfo(models.Model):
 
     def __str__(self):
         return f"{self.crypto.symbol.upper()} @ {self.timestamp}"
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['crypto', 'timestamp'], name='idx_crypto_ts'),
+            models.Index(fields=['crypto', 'timestamp', 'total_volume'], name='idx_crypto_ts_tv'),
+            models.Index(fields=['crypto', 'timestamp', 'total_volume', 'current_price'], name='idx_crypto_ts_tv_cp'),
+            models.Index(fields=['timestamp'], name='idx_ts_only'),
+            models.Index(fields=['-timestamp'], name='idx_ts_desc'),
+        ]
 
 
 class Source(models.Model):

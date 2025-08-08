@@ -1,81 +1,84 @@
+from django.db.models import OuterRef, Subquery, F
+from heapq import nlargest
 from core.models import CryptoInfo, MarketIndicatorSnapshot
 from .base import MarketInfoBase
-from django.utils.timezone import now
-from django.db.models import Max
-from collections import defaultdict
 
 class VMRIndicator(MarketInfoBase):
-    def __init__(self, crypto_queryset):
-        super().__init__(crypto_queryset)
-        self.top_n = 5
+    WINDOW = None  # instantané
+    top_n = 5
 
     def compute(self):
-        latest_timestamp = CryptoInfo.objects.aggregate(latest=Max("timestamp"))["latest"]
-        if not latest_timestamp:
-            self._value = "N/A"
+        # Sous-requête: dernier total_volume par crypto
+        latest_vol_sq = (
+            CryptoInfo.objects
+            .filter(crypto=OuterRef('pk'))
+            .order_by('-timestamp')
+            .values('total_volume')[:1]
+        )
+
+        # On se limite aux cryptos du queryset fourni
+        qs = (
+            self.crypto_queryset
+            .annotate(latest_volume=Subquery(latest_vol_sq), sym=F('symbol'))
+            .filter(latest_volume__isnull=False)
+        )
+
+        volumes = [c.latest_volume for c in qs if c.latest_volume and c.latest_volume > 0]
+        if not volumes:
             self._numeric = None
+            self._value = "N/A"
             return self._value
 
-        latest_date = latest_timestamp.date()
-        data = CryptoInfo.objects.filter(timestamp__date=latest_date)
-
-        volumes = []
-        total_volume = 0
-
-        for item in data:
-            if item.total_volume:
-                volumes.append((item.total_volume, item.crypto.symbol))
-                total_volume += item.total_volume
-
-        if total_volume == 0 or not volumes:
-            self._value = "N/A"
+        total_volume = sum(volumes)
+        if total_volume <= 0:
             self._numeric = None
+            self._value = "N/A"
             return self._value
 
-        top_volume = sum(v for v, _ in sorted(volumes, reverse=True)[:self.top_n])
-        vmr = round((top_volume / total_volume) * 100, 2)
+        top_sum = sum(nlargest(self.top_n, volumes))
+        vmr = round((top_sum / total_volume) * 100, 2)
 
         self._numeric = vmr
         self._value = f"{vmr:.2f}%"
         return self._value
 
     def get_flag(self):
-        if self._numeric is None:
-            return 3  # neutre si inconnu
-
-        if self._numeric >= 85:
-            return 5  # très concentré
-        elif self._numeric >= 70:
-            return 4
-        elif self._numeric >= 50:
+        # 1 = pire (très concentré), 5 = meilleur (bien réparti)
+        v = getattr(self, "_numeric", None)
+        if v is None:
             return 3
-        elif self._numeric >= 30:
+        if v >= 85:
+            return 1
+        elif v >= 70:
             return 2
+        elif v >= 50:
+            return 3
+        elif v >= 30:
+            return 4
         else:
-            return 1  # bien réparti
+            return 5
 
     def get_label(self):
         return "VMR"
 
     def get_message(self):
-        if self._numeric is None:
+        v = getattr(self, "_numeric", None)
+        if v is None:
             return "La concentration du volume n’a pas pu être calculée."
-
-        if self._numeric >= 85:
-            return "L’activité du marché est extrêmement concentrée sur quelques cryptos."
-        elif self._numeric >= 70:
-            return "Le volume de marché est concentré autour des grandes cryptos."
-        elif self._numeric >= 50:
-            return "L’activité est modérément concentrée."
-        elif self._numeric >= 30:
-            return "Le volume est réparti de manière relativement équilibrée."
+        if v >= 85:
+            return "Activité extrêmement concentrée sur quelques cryptos."
+        elif v >= 70:
+            return "Volume concentré autour des grandes cryptos."
+        elif v >= 50:
+            return "Concentration modérée de l’activité."
+        elif v >= 30:
+            return "Répartition relativement équilibrée des volumes."
         else:
-            return "Le volume est très bien réparti sur l’ensemble du marché."
+            return "Volume très bien réparti sur l’ensemble du marché."
 
     def save_snapshot(self):
         if not hasattr(self, "_value"):
             self.compute()
-
         MarketIndicatorSnapshot.objects.update_or_create(
             name=self.__class__.__name__,
             defaults={
