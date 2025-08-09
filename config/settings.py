@@ -187,7 +187,7 @@ AUTH_USER_MODEL = 'core.PosaUser'
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 30,  # Tu peux modifier cette valeur selon ton besoin
+    'PAGE_SIZE': 10,  # Tu peux modifier cette valeur selon ton besoin
     'DEFAULT_FILTER_BACKENDS': [
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',

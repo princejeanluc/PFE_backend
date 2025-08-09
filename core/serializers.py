@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Crypto, CryptoInfo, New, PortfolioPerformance, Prediction, Portfolio, Holding, MarketSnapshot, StressScenario
-from django.db.models import Max
+from core.constants import PREDICTION_MODELS
 # Utilisateur personnalisé
 User = get_user_model()
 
@@ -78,6 +78,10 @@ class MarketSnapshotSerializer(serializers.ModelSerializer):
         model = MarketSnapshot
         fields = ['id', 'timestamp', 'crypto', 'price', 'volume', 'market_cap']
 
+
+def _safe_key(model_name: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in model_name)
+
 # serializers.py
 class CryptoWithLatestInfoSerializer(serializers.ModelSerializer):
     latest_info = serializers.SerializerMethodField()
@@ -85,7 +89,7 @@ class CryptoWithLatestInfoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Crypto
-        fields = ['id', 'symbol', 'name', 'slug', 'image_url', 'latest_info']
+        fields = ['id', 'symbol', 'name', 'slug', 'image_url', 'latest_info', 'latest_predictions']
 
     def get_latest_info(self, obj):
         latest = obj.infos.order_by('-timestamp').first()
@@ -102,38 +106,53 @@ class CryptoWithLatestInfoSerializer(serializers.ModelSerializer):
         return None
     
     def get_latest_predictions(self, obj):
-        # 1) Dernière date de prédiction pour CETTE crypto
-        latest_date = (obj.prediction_set
-                         .aggregate(Max('predicted_date'))
-                         .get('predicted_date__max'))
-        if not latest_date:
-            return []
+        out = []
 
-        # 2) Prédictions à cette date (optionnel: limiter aux 2 modèles connus)
-        qs = (obj.prediction_set
-                .filter(predicted_date=latest_date)
-                # .filter(model_name__in=['XGBoost', 'GRU'])  # <- décommente si tu veux figer à ces 2 modèles
-                .only('model_name','predicted_price','predicted_log_return',
-                      'predicted_volatility','predicted_date','created_at')
-                .order_by('model_name','-created_at'))
+        # 1) Essaye d’abord les annotations (rapide, pas de N+1)
+        annotated_found = False
+        for model_name in PREDICTION_MODELS:
+            key = _safe_key(model_name)
+            price      = getattr(obj, f'{key}_predicted_price', None)
+            log_ret    = getattr(obj, f'{key}_predicted_log_return', None)
+            vol        = getattr(obj, f'{key}_predicted_volatility', None)
+            pred_date  = getattr(obj, f'{key}_predicted_date', None)
+            created_at = getattr(obj, f'{key}_prediction_created_at', None)
 
-        # 3) Garder la plus récente par modèle (réduction côté Python, portable)
-        by_model = {}
-        for p in qs:
-            if p.model_name not in by_model:
-                by_model[p.model_name] = {
-                    "model_name": p.model_name,
-                    "predicted_price": p.predicted_price,
-                    "predicted_log_return": p.predicted_log_return,
-                    "predicted_volatility": p.predicted_volatility,
-                    "predicted_date": p.predicted_date,
-                    "created_at": p.created_at,
-                }
+            if any(v is not None for v in (price, log_ret, vol, pred_date, created_at)):
+                annotated_found = True
+                out.append({
+                    "model_name": model_name,
+                    "predicted_price": price,
+                    "predicted_log_return": log_ret,
+                    "predicted_volatility": vol,
+                    "predicted_date": pred_date,
+                    "created_at": created_at,
+                })
 
-        # 4) Retourner une liste (ex. deux entrées: XGBoost, GRU)
-        # tri optionnel, pour l’affichage
-        return sorted(by_model.values(), key=lambda x: x["model_name"].lower())
-    
+        if annotated_found:
+            out.sort(key=lambda x: x["model_name"].lower())
+            return out
+
+        # 2) Fallback portable : dernier par modèle (sans DISTINCT ON), 1 mini-requête par modèle
+        for model_name in PREDICTION_MODELS:
+            pred = (obj.prediction_set
+                    .filter(model_name=model_name)
+                    .order_by('-predicted_date', '-created_at')
+                    .only('model_name','predicted_price','predicted_log_return',
+                          'predicted_volatility','predicted_date','created_at')
+                    .first())
+            if pred:
+                out.append({
+                    "model_name": pred.model_name,
+                    "predicted_price": pred.predicted_price,
+                    "predicted_log_return": pred.predicted_log_return,
+                    "predicted_volatility": pred.predicted_volatility,
+                    "predicted_date": pred.predicted_date,
+                    "created_at": pred.created_at,
+                })
+
+        out.sort(key=lambda x: x["model_name"].lower())
+        return out
 
 
 class PortfolioPerformanceSerializer(serializers.ModelSerializer):

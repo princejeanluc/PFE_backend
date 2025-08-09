@@ -186,6 +186,13 @@ class Prediction(models.Model):
     predicted_volatility = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['crypto', 'predicted_date'], name='idx_pred_crypto_date'),
+            models.Index(fields=['crypto', 'model_name', 'predicted_date'], name='idx_pred_model_date'),
+            models.Index(fields=['crypto', 'model_name', '-created_at'], name='idx_pred_model_created_desc'),
+        ]
+
     def __str__(self):
         return f"Prediction for {self.crypto.name} at {self.predicted_date}"
     

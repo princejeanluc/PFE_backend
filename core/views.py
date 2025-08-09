@@ -49,6 +49,9 @@ from core.business.risk.simulate import (
     simulate_with_ngarch, compute_metrics_from_paths, build_history_for_response
 )
 from core.business.risk.stress import apply_stress_to_portfolio
+from core.constants import PREDICTION_MODELS
+from django.db.models import OuterRef, Subquery
+
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
     serializer_class = RegisterSerializer
@@ -63,11 +66,40 @@ class RegisterView(generics.CreateAPIView):
             "refresh": str(refresh),
             "access": str(refresh.access_token)
         }, status=status.HTTP_201_CREATED)
-    
+
+
+def _safe_key(model_name: str) -> str:
+    # clé d’annotation sûre (ex: "XGBoost" -> "xgboost")
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in model_name)
+
 class CryptoViewSet(viewsets.ModelViewSet):
     queryset = Crypto.objects.all()
     serializer_class = CryptoSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        qs = Crypto.objects.all()
+
+        # Pour chaque modèle, on annote la dernière prédiction (ordre: predicted_date, puis created_at)
+        for model_name in PREDICTION_MODELS:
+            key = _safe_key(model_name)
+            base_sq = (
+                Prediction.objects
+                .filter(crypto=OuterRef('pk'), model_name=model_name)
+                .order_by('-predicted_date', '-created_at')
+            )
+
+            qs = qs.annotate(
+                **{
+                    f'{key}_predicted_price':       Subquery(base_sq.values('predicted_price')[:1]),
+                    f'{key}_predicted_log_return':  Subquery(base_sq.values('predicted_log_return')[:1]),
+                    f'{key}_predicted_volatility':  Subquery(base_sq.values('predicted_volatility')[:1]),
+                    f'{key}_predicted_date':        Subquery(base_sq.values('predicted_date')[:1]),
+                    f'{key}_prediction_created_at': Subquery(base_sq.values('created_at')[:1]),
+                }
+            )
+
+        return qs
 
 
 class CryptoInfoViewSet(viewsets.ModelViewSet):
