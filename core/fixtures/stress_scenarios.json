@@ -1,0 +1,33 @@
+[
+    {
+        "model": "core.stressscenario",
+        "pk": 1,
+        "fields": {
+            "name": "COVID 2020",
+            "type": "historical",
+            "params": {"start":"2020-02-15T00:00:00Z","end":"2020-03-20T00:00:00Z","proxy":"BTC"},
+            "horizon_hours": 720,
+            "is_active": true
+        }
+    },
+    {
+        "model": "core.stressscenario",
+        "pk": 2,
+        "fields": {
+            "name": "Crash BTC",
+            "type": "factor",
+            "params": {"BTC":-0.35,"ETH":-0.4,"default":-0.45},
+            "is_active": true
+        }
+    },
+    {
+        "model": "core.stressscenario",
+        "pk": 3,
+        "fields": {
+            "name": "Panique marché",
+            "type": "uniform",
+            "params": {"return":-0.25},
+            "is_active": true
+        }
+    }
+]

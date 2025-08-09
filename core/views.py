@@ -7,11 +7,11 @@ from rest_framework.pagination import PageNumberPagination
 from core.business.market.manager import MarketInfoManager
 from core.business.risk.pricing import OptionPricingParams, price_option_mc
 from core.business.simulation.allocation import create_performance_series, initialize_quantities, run_markowitz_allocation
-from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction
+from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction, StressScenario
 from .serializers import (
     CryptoSerializer, CryptoInfoSerializer, CryptoTopSerializer, CryptoWithLatestInfoSerializer, MarketSnapshotSerializer, OptionPricingInputSerializer,
     PortfolioSerializer, HoldingSerializer,
-    NewSerializer, PortfolioWithHoldingsSerializer, PosaUserSerializer, PredictionSerializer, RegisterSerializer
+    NewSerializer, PortfolioWithHoldingsSerializer, PosaUserSerializer, PredictionSerializer, RegisterSerializer, StressApplySerializer, StressScenarioSerializer
 )
 from django.contrib.auth import get_user_model
 
@@ -48,6 +48,7 @@ from core.business.risk.simulate import (
     RiskSimParams, to_hourly_median, log_returns_pct,
     simulate_with_ngarch, compute_metrics_from_paths, build_history_for_response
 )
+from core.business.risk.stress import apply_stress_to_portfolio
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
     serializer_class = RegisterSerializer
@@ -666,3 +667,31 @@ class OptionPricingView(APIView):
                 "last_price": result["last_price"],
             }
         }, status=200)
+    
+
+class StressScenarioListView(generics.ListAPIView):
+    queryset = StressScenario.objects.filter(is_active=True)
+    serializer_class = StressScenarioSerializer
+
+
+class StressApplyView(generics.GenericAPIView):
+    serializer_class = StressApplySerializer
+
+    def post(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        # Charger le scénario
+        if "id" in data["scenario"]:
+            sc = StressScenario.objects.get(id=data["scenario"]["id"])
+            scenario = StressScenarioSerializer(sc).data
+        else:
+            scenario = data["scenario"]
+
+        # Charger le portefeuille
+        portfolio = Portfolio.objects.get(id=data["portfolio_id"])
+
+        # Appliquer le stress
+        result = apply_stress_to_portfolio(portfolio, scenario)
+        return Response(result, status=status.HTTP_200_OK)

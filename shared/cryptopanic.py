@@ -162,7 +162,7 @@ def fetch_news_from_cryptopanic():
     articles_seen = set()
 
     news_list = []
-    for _ in range(2):
+    for _ in range(1):
         k , tmp_news  = scroll_and_collect(driver, articles_seen, news_list)
         news_list += tmp_news
     driver.quit()

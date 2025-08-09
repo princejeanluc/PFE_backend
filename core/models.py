@@ -210,3 +210,19 @@ class MarketIndicatorSnapshot(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.updated_at.strftime('%Y-%m-%d %H:%M')})"
+
+class StressScenario(models.Model):
+    TYPES = [
+        ('uniform', 'Uniform shock'),
+        ('factor', 'Factor shock'),
+        ('historical', 'Historical replay'),
+    ]
+    name = models.CharField(max_length=200, unique=True)
+    type = models.CharField(max_length=20, choices=TYPES)
+    params = models.JSONField(default=dict)
+    horizon_hours = models.PositiveIntegerField(default=24)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.type})"

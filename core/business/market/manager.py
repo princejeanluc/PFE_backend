@@ -4,7 +4,9 @@ from django.db import transaction
 from django.utils.timezone import now, timedelta
 from django.db.models import QuerySet
 
+from core.business.market.indicators.averagetopvolatility import AverageTopVolatilityInfo
 from core.business.market.indicators.btcdominance import BTCDominanceInfo
+from core.business.market.indicators.mcdi import MCDIIndicator
 from core.business.market.indicators.topcryptovariation import TopCryptoVariationInfo
 from core.business.market.indicators.upwardtrend import UpwardTrendInfo
 from core.business.market.indicators.vmr import VMRIndicator
@@ -36,6 +38,8 @@ class MarketInfoManager:
         VMRIndicator,
         UpwardTrendInfo,
         BTCDominanceInfo,
+        AverageTopVolatilityInfo,
+        MCDIIndicator
     ]
 
     # TTL par indicateur (minutes). Ajuste selon coût / nature du signal.
@@ -67,7 +71,7 @@ class MarketInfoManager:
         except Exception as e:
             # Sécurité: si compute plante, on renvoie un snapshot “erreur”
             value, numeric, flag = "N/A", None, 3
-            message = f"Erreur lors du calcul ({label})."
+            message = f"Erreur lors du calcul ({label}) {e}."
         # Écrit en base de façon atomique
         with transaction.atomic():
             MarketIndicatorSnapshot.objects.update_or_create(
