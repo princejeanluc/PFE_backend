@@ -10,30 +10,54 @@ import cvxpy as cp
 PERIOD_DAY = 30 # nb jours
 
 
-def compute_optimal_weights(price_df: pd.DataFrame, objective: str = "sharpe") -> dict:
+def nearest_psd(Sigma, eps=1e-8):
+    # symétriser + petit ridge pour éviter la quasi-singularité
+    S = 0.5 * (Sigma + Sigma.T)
+    # ridge
+    return S + eps * np.eye(S.shape[0])
+
+def compute_optimal_weights(price_df: pd.DataFrame, objective: str = "sharpe",
+                            risk_aversion: float = 10.0, target_return: float | None = None) -> dict:
     returns = np.log(price_df / price_df.shift(1)).dropna()
     mu = returns.mean().values
     Sigma = returns.cov().values
     n = len(mu)
 
+    # garde-fous
+    if n == 0:
+        raise ValueError("Pas assez d'actifs.")
+    if np.allclose(Sigma, 0):
+        # fallback trivial : tout sur le meilleur mu ou répartition égale
+        w = np.ones(n) / n
+        return {symbol: float(round(wi, 4)) for symbol, wi in zip(price_df.columns, w)}
+
+    Sigma = nearest_psd(Sigma, eps=1e-6)
+
     w = cp.Variable(n)
     constraints = [cp.sum(w) == 1, w >= 0]
 
     if objective == "sharpe":
-        risk_free = 0.0
-        excess = mu - risk_free
-        problem = cp.Problem(cp.Maximize(excess @ w / cp.sqrt(cp.quad_form(w, Sigma))), constraints)
+        # ✅ DCP-friendly : trade-off moyen-variance
+        obj = cp.Maximize(mu @ w - risk_aversion * cp.quad_form(w, Sigma))
+        prob = cp.Problem(obj, constraints)
+
     elif objective == "min_volatility":
-        problem = cp.Problem(cp.Minimize(cp.quad_form(w, Sigma)), constraints)
+        prob = cp.Problem(cp.Minimize(cp.quad_form(w, Sigma)), constraints)
+
     elif objective == "max_return":
-        problem = cp.Problem(cp.Maximize(mu @ w), constraints)
+        prob = cp.Problem(cp.Maximize(mu @ w), constraints)
+
+    elif objective == "target_return":
+        # ✅ DCP : variance minimale sous contrainte de rendement
+        R = float(target_return) if target_return is not None else float(np.mean(mu))
+        prob = cp.Problem(cp.Minimize(cp.quad_form(w, Sigma)), constraints + [mu @ w >= R])
+
     else:
         raise ValueError(f"Objectif non reconnu : {objective}")
 
-    problem.solve()
+    prob.solve(solver=cp.OSQP, verbose=False)  # ou SCS
     if w.value is None:
         raise ValueError("Échec de l'optimisation : poids non définis")
-
     return {symbol: round(float(weight), 4) for symbol, weight in zip(price_df.columns, w.value)}
 
 

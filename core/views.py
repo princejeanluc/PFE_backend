@@ -1,5 +1,6 @@
 # views.py
 from datetime import timedelta
+from threading import Thread
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -7,6 +8,7 @@ from rest_framework.pagination import PageNumberPagination
 from core.business.market.manager import MarketInfoManager
 from core.business.risk.pricing import OptionPricingParams, price_option_mc
 from core.business.simulation.allocation import create_performance_series, initialize_quantities, run_markowitz_allocation
+from core.paginations import CryptoPagination
 from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction, StressScenario
 from .serializers import (
     CryptoSerializer, CryptoInfoSerializer, CryptoTopSerializer, CryptoWithLatestInfoSerializer, MarketSnapshotSerializer, OptionPricingInputSerializer,
@@ -75,6 +77,7 @@ def _safe_key(model_name: str) -> str:
 class CryptoViewSet(viewsets.ModelViewSet):
     queryset = Crypto.objects.all()
     serializer_class = CryptoSerializer
+    pagination_class = CryptoPagination
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
@@ -158,6 +161,25 @@ class NewViewSet(viewsets.ModelViewSet):
         news = New.objects.order_by('-datetime')[:5]
         serialized = NewSerializer(news, many=True)
         return Response(serialized.data)
+    
+def _simulate_job(portfolio_id: int):
+    cache.set(f"pf:{portfolio_id}:status", "running", 3600)
+    from core.models import Portfolio
+    portfolio = Portfolio.objects.get(pk=portfolio_id)
+    try:
+        if portfolio.allocation_type == "autom":
+            run_markowitz_allocation(portfolio)
+
+        if not portfolio.holdings.exists():
+            cache.set(f"pf:{portfolio_id}:status", "error: no allocation", 600)
+            return
+
+        initialize_quantities(portfolio)
+        create_performance_series(portfolio)
+
+        cache.set(f"pf:{portfolio_id}:status", "ready", 3600)
+    except Exception as e:
+        cache.set(f"pf:{portfolio_id}:status", f"error: {e}", 600)
 
 class PortfolioViewSet(viewsets.ModelViewSet):
     serializer_class = PortfolioSerializer
@@ -191,21 +213,9 @@ class PortfolioViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='simulate', permission_classes=[permissions.IsAuthenticated])
     def simulate_portfolio(self, request, pk=None):
         portfolio = self.get_queryset().get(pk=pk)
-
-        # 1. ALLOCATION
-        if portfolio.allocation_type == "autom":
-            run_markowitz_allocation(portfolio)
-
-        if not portfolio.holdings.exists():
-            return Response({"error": "Aucune allocation trouvée."}, status=400)
-
-        # 2. INITIALISATION DES QUANTITÉS
-        initialize_quantities(portfolio)
-
-        # 3. SIMULATION
-        create_performance_series(portfolio)
-
-        return Response({"detail": "Simulation effectuée avec succès."}, status=200)
+        # lance le job et répond tout de suite
+        Thread(target=_simulate_job, args=(portfolio.id,), daemon=True).start()
+        return Response({"detail": "Simulation démarrée", "status": "running"}, status=202)
     
     @action(detail=True, methods=["get"], url_path="crypto-returns", permission_classes=[permissions.IsAuthenticated])
     def crypto_returns(self, request, pk=None):
@@ -235,7 +245,7 @@ class PortfolioViewSet(viewsets.ModelViewSet):
 
             df["timestamp"] = pd.to_datetime(df["timestamp"])
             df.set_index("timestamp", inplace=True)
-            df = df.resample("1H").median().dropna()
+            df = df.resample("1h").median().dropna()
 
             if len(df) < 2:
                 continue
@@ -376,173 +386,255 @@ class CryptoHistoryView(APIView):
         }
         return Response(response)
     
+# views.py
+from django.db.models import F
+from django.core.cache import cache
+from django.utils.timezone import now
+from rest_framework import permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from datetime import timedelta
+
+import numpy as np
+import pandas as pd
+
+# si tu as statsmodels
+from statsmodels.tsa.stattools import grangercausalitytests
+
+# ⚠️ utilise MarketSnapshot (déjà horaire) au lieu de CryptoInfo
+from core.models import MarketSnapshot  # adapte l'import
+
 class CryptoRelationMatrixView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        analysis_type = request.GET.get("type", "spearman")  # "spearman" or "granger"
-        period = request.GET.get("period", "30d")  # format: "14d"
-        lag = int(request.GET.get("lag", 1))  # utilisé seulement pour Granger
+        analysis_type = request.GET.get("type", "spearman")  # "spearman" | "granger"
+        period = request.GET.get("period", "30d")            # "14d"
+        lag = int(request.GET.get("lag", 1))                 # Granger uniquement
 
-        # Fenêtre temporelle
-        days = int(period.replace("d", ""))
+        # bornes de sécurité
+        days = max(1, min(int(period.replace("d", "")), 180))  # cap à 180j
         since = now() - timedelta(days=days)
 
-        cryptos = Crypto.objects.all()
-        data = {}
-        i = 0
-        for crypto in cryptos:
-            infos = CryptoInfo.objects.filter(
-                crypto=crypto, timestamp__gte=since
-            ).order_by("timestamp")
+        # downsample optionnel si période très longue
+        # (ici: garde 1 point sur 2 si > 90j)
+        step = 2 if days > 90 else 1
 
-            if infos.exists():
-                series = pd.Series(
-                    [info.current_price for info in infos],
-                    index=pd.to_datetime([info.timestamp for info in infos]),
-                    name=crypto.symbol
-                )
-                # Agrégation par heure : médiane
-                series_hourly = series.resample('1H').median()
-                data[crypto.symbol] = series_hourly
-                i += 1
+        # limite le nombre de colonnes pour Granger (coût O(k²))
+        top_k = int(request.GET.get("k", 20))  # par défaut 20, override via ?k=
+        top_k = max(2, min(top_k, 50))         # garde des bornes raisonnables
 
-        df = pd.DataFrame(data)
+        # ---------- CACHE ----------
+        cache_key = f"relmat:v2:{analysis_type}:{days}:{lag}:{top_k}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
 
-        # Supprimer uniquement les colonnes trop vides (ex: plus de 30% de NaN)
-        df = df.dropna(axis=1, thresh=int(len(df) * 0.7))
+        # ---------- UNIQUE REQUÊTE ORM ----------
+        # MarketSnapshot est déjà horaire ⇒ pas de resample.
+        # On récupère (timestamp, symbol, price) pour la fenêtre.
+        qs = (MarketSnapshot.objects
+              .filter(timestamp__gte=since)
+              .values_list("timestamp", "crypto__symbol", "price"))
 
-        if df.empty or df.shape[1] < 2:
-            print("Pas assez de données : df vide ou < 2 colonnes")
+        rows = list(qs)
+        if not rows:
+            return Response({"error": "Pas de données dans la période demandée."}, status=400)
+
+        df = pd.DataFrame(rows, columns=["timestamp", "symbol", "price"])
+        # Index horaire global (floor au cas où)
+        df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.floor("h")
+
+        # PIVOT: index = heure, colonnes = symbol, valeurs = price
+        # MarketSnapshot étant horaire, pas besoin d'agg; sinon aggfunc="median"
+        wide = df.pivot_table(index="timestamp", columns="symbol", values="price", aggfunc="median")
+
+        # downsample si long
+        if step > 1:
+            wide = wide.iloc[::step, :]
+
+        # drop colonnes trop vides
+        keep_thresh = int(len(wide) * 0.7)
+        wide = wide.dropna(axis=1, thresh=keep_thresh)
+
+        if wide.shape[1] < 2:
             return Response({"error": "Pas assez de données pour établir des relations."}, status=400)
 
-        # Type d’analyse
+        # Normalise l’ensemble temporel (optionnel): on peut forward-fill sur petites lacunes
+        wide = wide.sort_index().ffill(limit=2)
+
+        # Pour Granger: sélectionne les top_k colonnes les plus “denses” et variables
+        if analysis_type == "granger" and wide.shape[1] > top_k:
+            # score = couverture non-null * variance
+            coverage = wide.notna().sum() / len(wide)
+            variance = wide.var(ddof=0).fillna(0)
+            score = coverage * variance
+            cols = score.sort_values(ascending=False).head(top_k).index
+            wide = wide[cols]
+
+        # ---------- CALCULS ----------
         if analysis_type == "spearman":
-            matrix = df.corr(method='spearman')
+            # min_periods pour éviter les corr bruyantes
+            matrix = wide.corr(method="spearman", min_periods=max(12, lag+2))
 
         elif analysis_type == "granger":
-            symbols = df.columns
-            matrix = pd.DataFrame(np.zeros((len(symbols), len(symbols))), columns=symbols, index=symbols)
+            # on travaille sur rendements (stationnarité)
+            returns = np.log(wide).diff().dropna()
+            symbols = list(returns.columns)
+            k = len(symbols)
+            M = pd.DataFrame(np.zeros((k, k)), index=symbols, columns=symbols)
 
+            # Optim: on pré-filtre les paires quasi colinéaires ou trop lacunaires
+            valid_len = (returns.notna().sum() > (lag + 8))
+            symbols = [s for s in symbols if valid_len[s]]
+            if len(symbols) < 2:
+                return Response({"error": "Données insuffisantes après nettoyage."}, status=400)
+
+            # Recalibre la matrice avec ce sous-ensemble
+            M = pd.DataFrame(np.zeros((len(symbols), len(symbols))), index=symbols, columns=symbols)
+
+            # Boucle double (k²), mais bornée par top_k
+            # Utilise try/except léger et séries sans NaN
             for cause in symbols:
                 for effect in symbols:
                     if cause == effect:
-                        matrix.loc[cause, effect] = 0
                         continue
-
-                    test_df = df[[effect, cause]].dropna()
-                    if len(test_df) > lag + 2:
-                        try:
-                            result = grangercausalitytests(test_df, maxlag=lag, verbose=False)
-                            p_value = result[lag][0]['ssr_ftest'][1]
-                            matrix.loc[cause, effect] = round(1 - p_value, 3)
-                        except Exception:
-                            matrix.loc[cause, effect] = 0
-                    else:
-                        matrix.loc[cause, effect] = 0
+                    pair = returns[[effect, cause]].dropna()
+                    if len(pair) <= lag + 8:
+                        continue
+                    try:
+                        # verbose=False évite l'overhead I/O
+                        res = grangercausalitytests(pair, maxlag=lag, verbose=False)
+                        p = res[lag][0]["ssr_ftest"][1]
+                        M.loc[cause, effect] = round(1 - float(p), 3)
+                    except Exception:
+                        # garde 0 en cas d’échec
+                        pass
+            matrix = M
         else:
             return Response({"error": "Type d'analyse non supporté"}, status=400)
-        dictMatrix = matrix.to_dict()
-        return Response({
-            "type": analysis_type,
-            "period": period,
-            "lag": lag,
-            "matrix": dictMatrix, 
-            "cryptos": dictMatrix.keys()
-        })
-    
 
+        out = {
+            "type": analysis_type,
+            "period": f"{days}d",
+            "lag": lag,
+            "matrix": matrix.to_dict(),
+            "cryptos": list(matrix.columns)
+        }
+
+        # ---------- CACHE (15 min spearman / 30 min granger) ----------
+        timeout = 15 * 60 if analysis_type == "spearman" else 30 * 60
+        cache.set(cache_key, out, timeout=timeout)
+
+        return Response(out)
+
+    
 class CryptoMapView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
     def get(self, request):
-        days = 30
+        # paramètres (bornés)
+        days = int(request.GET.get("days", 30))
+        days = max(1, min(days, 180))
         since = now() - timedelta(days=days)
+        min_points = int(request.GET.get("min_points", 24))  # densité min par symbole
+        top_k = int(request.GET.get("k", 200))               # limite nb de cryptos
+        top_k = max(10, min(top_k, 500))
 
-        cryptos = Crypto.objects.all()
-        features = []
+        cache_key = f"cryptomap:v3:{days}:{min_points}:{top_k}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
 
-        for crypto in cryptos:
-            infos = CryptoInfo.objects.filter(
-                crypto=crypto,
-                timestamp__gte=since,
-                current_price__isnull=False,
-                total_volume__isnull=False
-            ).order_by("timestamp")
+        # 1) UNIQUE REQUÊTE ORM (déjà horaire) → pas de resample
+        qs = (MarketSnapshot.objects
+              .filter(timestamp__gte=since,
+                      price__isnull=False,
+                      volume__isnull=False)
+              .values_list("timestamp", "crypto__symbol", "price", "volume",
+                           "crypto__image_url"))
+        rows = list(qs)
+        if not rows:
+            return Response({"error": "Pas de données dans la période demandée."}, status=400)
 
-            if infos.count() < 24:  # on s'assure qu'on a des données suffisantes
-                continue
+        df = pd.DataFrame(rows, columns=["timestamp", "symbol", "price", "volume", "image"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.floor("H")
+        df = df.sort_values(["symbol", "timestamp"])
 
-            df = pd.DataFrame.from_records([
-                {
-                    "timestamp": info.timestamp,
-                    "price": info.current_price,
-                    "volume": info.total_volume
-                }
-                for info in infos
-            ])
+        # 2) Filtre densité par symbole (évite count() par-crypto en DB)
+        counts = df.groupby("symbol")["timestamp"].size()
+        dense_symbols = counts[counts >= min_points].index
+        if len(dense_symbols) < 2:
+            return Response({"error": "Pas assez de données"}, status=400)
+        # limite top_k plus “informatif” (variance x couverture)
+        sub = df[df["symbol"].isin(dense_symbols)]
 
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df.set_index('timestamp', inplace=True)
-            df = df.resample("1H").median().dropna()
+        # score simple pour limiter k si besoin
+        # couverture ~ proportion d’heures distinctes
+        hours_per_symbol = sub.groupby("symbol")["timestamp"].nunique()
+        # variance de prix
+        var_per_symbol = sub.groupby("symbol")["price"].var(ddof=0).fillna(0.0)
+        score = (hours_per_symbol / hours_per_symbol.max()) * (var_per_symbol / (var_per_symbol.max() or 1.0))
+        keep = score.sort_values(ascending=False).head(top_k).index
+        sub = sub[sub["symbol"].isin(keep)]
 
-            if df.empty or len(df) < 10:
-                continue
+        # 3) Agrégations vectorisées (first/last/std/mean) par symbole
+        agg_idx = sub.groupby("symbol")["timestamp"].agg(first="first", last="last")
+        price_agg = sub.groupby("symbol")["price"].agg(first="first", last="last", std="std", mean="mean")
+        vol_agg   = sub.groupby("symbol")["volume"].agg(first="first", last="last", mean="mean")
+        img_map = sub.groupby("symbol")["image"].first()
 
-            # Métriques à calculer
-            ret = (df["price"].iloc[-1] - df["price"].iloc[0]) / df["price"].iloc[0]
-            vol = df["price"].std()
-            vol_change = (df["volume"].iloc[-1] - df["volume"].iloc[0]) / df["volume"].iloc[0]
-            avg_volume = df["volume"].mean()
+        # métriques
+        # return = (last - first) / first (avec garde-fous sur division)
+        eps = 1e-12
+        ret = (price_agg["last"] - price_agg["first"]) / (np.abs(price_agg["first"]) + eps)
+        vol_price = price_agg["std"].fillna(0.0)
+        vol_change = (vol_agg["last"] - vol_agg["first"]) / (np.abs(vol_agg["first"]) + eps)
+        avg_volume = vol_agg["mean"].fillna(0.0)
 
-            features.append({
-                "symbol": crypto.symbol,
-                "image": crypto.image_url,
-                "metrics": {
-                    "return": ret,
-                    "volatility": vol,
-                    "volume_change": vol_change,
-                    "avg_volume": avg_volume
-                }
-            })
+        df_features = pd.DataFrame({
+            "symbol": ret.index,
+            "return": ret.values.astype(float),
+            "volatility": vol_price.values.astype(float),
+            "volume_change": vol_change.values.astype(float),
+            "avg_volume": avg_volume.values.astype(float),
+        }).reset_index(drop=True)
 
-        if len(features) < 2:
+        if df_features.shape[0] < 2:
             return Response({"error": "Pas assez de données"}, status=400)
 
-        # Construction du DataFrame
-        df_features = pd.DataFrame([
-            {
-                "symbol": f["symbol"],
-                "return": f["metrics"]["return"],
-                "volatility": f["metrics"]["volatility"],
-                "volume_change": f["metrics"]["volume_change"],
-                "avg_volume": f["metrics"]["avg_volume"]
-            }
-            for f in features
-        ])
-
-        # Normalisation
+        # 4) Normalisation + UMAP + DBSCAN
+        X = df_features[["return", "volatility", "volume_change", "avg_volume"]].to_numpy()
         scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(df_features.drop(columns=["symbol"]))
+        X_scaled = scaler.fit_transform(X)
 
-        # Réduction UMAP
-        reducer = umap.UMAP(n_components=2, random_state=42)
+        # UMAP: 2D, voisins par défaut OK (données agrégées)
+        reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
         embedding = reducer.fit_transform(X_scaled)
 
-        # Clustering DBSCAN
         clustering = DBSCAN(eps=0.7, min_samples=3).fit(embedding)
         labels = clustering.labels_
-        # Format final
-        result = []
-        for i, f in enumerate(features):
-            result.append({
-                "symbol": f["symbol"],
-                "image": f["image"],
-                "x": float(embedding[i][0]),
-                "y": float(embedding[i][1]),
-                "cluster": int(labels[i]) if labels[i] != -1 else None,  # -1 = outlier
-                "metrics": f["metrics"]
-            })
-        return Response({"points": result})
+
+        # 5) Format de sortie (évite .iloc dans boucle → index alignés)
+        sym = df_features["symbol"].tolist()
+        out = [{
+            "symbol": s,
+            "image": img_map.get(s),
+            "x": float(embedding[i, 0]),
+            "y": float(embedding[i, 1]),
+            "cluster": (int(labels[i]) if labels[i] != -1 else None),
+            "metrics": {
+                "return": float(df_features.at[i, "return"]),
+                "volatility": float(df_features.at[i, "volatility"]),
+                "volume_change": float(df_features.at[i, "volume_change"]),
+                "avg_volume": float(df_features.at[i, "avg_volume"]),
+            }
+        } for i, s in enumerate(sym)]
+
+        result = {"points": out}
+        # cache 15 min (c’est un “map” exploratoire)
+        cache.set(cache_key, result, 15 * 60)
+        return Response(result)
 
 
 class LatestCryptoInfoView(generics.ListAPIView):

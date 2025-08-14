@@ -44,7 +44,7 @@ class NewSerializer(serializers.ModelSerializer):
 class PredictionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prediction
-        fields = ['id', 'crypto', 'timestamp', 'predicted_price', 'predicted_return', 'volatility']
+        fields = ['id', 'crypto', 'timestamp', 'predicted_price', 'predicted_return', 'volatility', 'predicted_date']
 
 # Portefeuille
 class PortfolioSerializer(serializers.ModelSerializer):

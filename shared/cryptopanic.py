@@ -131,7 +131,7 @@ def scroll_and_collect(driver, articles_seen, news_list):
             datetime_el = art.find_element(By.CSS_SELECTOR, ".nc-date time")
             datetime_str = datetime_el.get_attribute("datetime") if datetime_el else None
 
-            source_el = art.find_element(By.CSS_SELECTOR, ".si-source-name")
+            source_el = art.find_element(By.CSS_SELECTOR, ".si-source-domain")
             source = source_el.text if source_el else None
 
             cryptos = [

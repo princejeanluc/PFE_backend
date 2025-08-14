@@ -1,9 +1,10 @@
+import pandas as pd
+import numpy as np
+from collections import defaultdict
 from .base import MarketInfoBase
 from core.models import CryptoInfo, MarketIndicatorSnapshot
 from datetime import timedelta
 from django.utils.timezone import now
-import numpy as np
-from collections import defaultdict
 
 class AverageTopVolatilityInfo(MarketInfoBase):
     WINDOW_DAYS = 30  # Fenêtre optimale pour cet indicateur
@@ -15,42 +16,40 @@ class AverageTopVolatilityInfo(MarketInfoBase):
         recent_cutoff = now_time - timedelta(hours=self.RECENT_HOURS)
 
         # Étape 1 : récupérer les dernières market_cap par crypto (sur fenêtre récente)
-        latest_infos = (
-            CryptoInfo.objects
-            .filter(timestamp__gte=recent_cutoff, market_cap__isnull=False)
-            .order_by('crypto', '-timestamp')
-            .distinct('crypto')  # PostgreSQL requis
-        )
+        latest_infos = CryptoInfo.objects.filter(
+            timestamp__gte=recent_cutoff,
+            market_cap__isnull=False
+        ).order_by('crypto', '-timestamp')
 
-        latest_market_cap = {}
-        for info in latest_infos:
-            symbol = info.crypto.symbol
-            if symbol not in latest_market_cap:
-                latest_market_cap[symbol] = (info.market_cap, info.crypto)
+        # Créer un DataFrame à partir des résultats de la base de données
+        data = pd.DataFrame(list(latest_infos.values('crypto__symbol', 'market_cap', 'timestamp')))
+        data['timestamp'] = pd.to_datetime(data['timestamp'])
+        
+        # Étape 2 : Trouver le dernier market_cap pour chaque crypto (top 10)
+        latest_market_cap = data.groupby('crypto__symbol').first().reset_index()
+        latest_market_cap_sorted = latest_market_cap.sort_values(by='market_cap', ascending=False).head(10)
+        top_symbols = latest_market_cap_sorted['crypto__symbol'].values
 
-        # Top 10 par market_cap
-        top_cryptos = sorted(latest_market_cap.items(), key=lambda x: x[1][0], reverse=True)[:10]
-        top_symbols = {crypto.symbol for _, (_, crypto) in top_cryptos}
+        # Étape 3 : récupérer les prix sur la fenêtre
+        recent_infos = CryptoInfo.objects.filter(
+            timestamp__gte=time_threshold,
+            current_price__isnull=False,
+            crypto__symbol__in=top_symbols
+        ).order_by('crypto', 'timestamp')
 
-        # Étape 2 : récupérer les prix sur la fenêtre
-        recent_infos = (
-            CryptoInfo.objects
-            .filter(timestamp__gte=time_threshold, current_price__isnull=False)
-            .filter(crypto__symbol__in=top_symbols)
-            .order_by('crypto', 'timestamp')
-        )
+        # Créer un DataFrame avec les données des prix
+        price_data = pd.DataFrame(list(recent_infos.values('crypto__symbol', 'current_price', 'timestamp')))
+        price_data['timestamp'] = pd.to_datetime(price_data['timestamp'])
 
-        # Étape 3 : agréger par crypto
-        prices_by_crypto = defaultdict(list)
-        for info in recent_infos:
-            prices_by_crypto[info.crypto.symbol].append(info.current_price)
+        # Étape 4 : Agrégation des prix par crypto
+        prices_by_crypto = price_data.groupby('crypto__symbol')['current_price'].apply(list).to_dict()
 
-        # Étape 4 : calcul des volatilités
+        # Étape 5 : Calcul des volatilités
         volatilities = []
         for prices in prices_by_crypto.values():
             if len(prices) >= 2:
                 log_returns = np.diff(np.log(prices))
-                if len(log_returns):
+                if len(log_returns) > 0:
                     vol = np.std(log_returns) * np.sqrt(24)
                     volatilities.append(vol)
 
@@ -59,7 +58,7 @@ class AverageTopVolatilityInfo(MarketInfoBase):
             self._value = "N/A"
             self._numeric = None
         else:
-            avg_vol = float(np.mean(volatilities))
+            avg_vol = np.mean(volatilities)
             self._value = f"{avg_vol:.2%}"
             self._numeric = avg_vol
 

@@ -113,20 +113,19 @@ def fit_gpd_tails_auto(residuals, seuils_test_droite=None, seuils_test_gauche=No
     return {
         "right_tail": {
             "threshold": u_pos_opt,
-            "shape": params_pos[0],
+            "xi": params_pos[0],
             "scale": params_pos[2]
         },
         "left_tail": {
             "threshold": -u_neg_opt,
-            "shape": params_neg[0],
+            "xi": params_neg[0],
             "scale": params_neg[2]
         }
     }
 
 
 # ---- NGARCH + loi mixte : branch point ----
-# Ici on laisse un point d’intégration propre pour ton notebook.
-# Remplace `simulate_with_ngarch` par ton implémentation réelle (fit + simulate).
+
 def simulate_with_ngarch(
     logret_pct: np.ndarray,
     last_price: float,
@@ -148,10 +147,10 @@ def simulate_with_ngarch(
     df_t, loc_t, scale_t = student.fit(logret_pct)
     mixture_params = MixtureParams(
         df_student = float(df_t),
-        left  = TailParams(xi=float(gpd_params['left_tail']['shape']),
+        left  = TailParams(xi=float(gpd_params['left_tail']['xi']),
                            beta=float(gpd_params['left_tail']['scale']),
                            u=float(gpd_params['left_tail']['threshold'])),
-        right = TailParams(xi=float(gpd_params['right_tail']['shape']),
+        right = TailParams(xi=float(gpd_params['right_tail']['xi']),
                            beta=float(gpd_params['right_tail']['scale']),
                            u=float(gpd_params['right_tail']['threshold'])),
     )
