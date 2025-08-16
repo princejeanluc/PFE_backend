@@ -130,7 +130,7 @@ def _cumulative_return_for_crypto(crypto: Crypto, start, end) -> float | None:
     df = df.set_index("timestamp").sort_index()
 
     # Agrégation en médiane horaire pour aligner les séries
-    df_hourly = df.resample("1H").median().dropna()
+    df_hourly = df.resample("1h").median().dropna()
     if df_hourly.empty:
         return None
 

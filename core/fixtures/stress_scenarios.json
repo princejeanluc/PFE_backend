@@ -29,5 +29,16 @@
             "params": {"return":-0.25},
             "is_active": true
         }
+    },
+    {
+        "model": "core.stressscenario",
+        "pk": 4,
+        "fields": {
+            "name": "Mois Juillet 2025",
+            "type": "historical",
+            "params": {"start":"2025-07-01T00:00:00Z","end":"2025-08-01T00:00:00Z","proxy":"BTC"},
+            "horizon_hours": 720,
+            "is_active": true
+        }
     }
 ]
