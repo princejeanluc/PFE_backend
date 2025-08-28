@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CryptoHistoryView, CryptoMapView, CryptoRelationMatrixView, CryptoViewSet, CryptoInfoViewSet, CurrentUserView, GoogleAuthTokenView, LatestCryptoInfoView, MarketIndicatorsView,  MarketSnapshotViewSet, OptionPricingView,
+    AssistBriefView, AssistChatView, CryptoHistoryView, CryptoMapView, CryptoRelationMatrixView, CryptoViewSet, CryptoInfoViewSet, CurrentUserView, GoogleAuthTokenView, LatestCryptoInfoView, MarketIndicatorsView,  MarketSnapshotViewSet, OptionPricingView,
     PortfolioViewSet, HoldingViewSet,
     NewViewSet, PosaUserViewSet, PredictionViewSet, RegisterView, RiskSimulationView, StressApplyView, StressScenarioListView
 )
@@ -56,3 +56,16 @@ urlpatterns += [
 
 ] 
 
+from core.views import LLMListPortfolios, LLMPortfolioSummary
+urlpatterns += [
+    path("llm/portfolios/list/", LLMListPortfolios.as_view()),
+    path("llm/portfolio/<int:pk>/summary/", LLMPortfolioSummary.as_view()),
+]
+
+urlpatterns += [
+    path("assist/brief/", AssistBriefView.as_view(), name="assist-brief"),
+]
+
+urlpatterns += [
+    path("assist/chat/", AssistChatView.as_view(), name="assist-chat"),
+]

@@ -1,4 +1,5 @@
 # views.py
+from contextlib import contextmanager
 from datetime import timedelta
 from threading import Thread
 from rest_framework import viewsets, permissions, generics, filters
@@ -8,6 +9,7 @@ from rest_framework.pagination import PageNumberPagination
 from core.business.market.manager import MarketInfoManager
 from core.business.risk.pricing import OptionPricingParams, price_option_mc
 from core.business.simulation.allocation import create_performance_series, initialize_quantities, run_markowitz_allocation
+from core.lib.policy import ASSISTANT_POLICY
 from core.paginations import CryptoPagination
 from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction, StressScenario
 from .serializers import (
@@ -819,3 +821,178 @@ class StressApplyView(generics.GenericAPIView):
         # Appliquer le stress
         result = apply_stress_to_portfolio(portfolio, scenario)
         return Response(result, status=status.HTTP_200_OK)
+    
+
+
+
+# views_llm.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import permissions
+from core.permissions import IsLLMRequest
+from urllib.parse import urlparse
+class LLMListPortfolios(APIView):
+    permission_classes = [IsLLMRequest]
+    def get(self, request):
+        qs = Portfolio.objects.filter(user=request.user).only("id","name").order_by("-creation_date")[:20]
+        return Response([{"id": p.id, "name": p.name} for p in qs])
+
+class LLMPortfolioSummary(APIView):
+    permission_classes = [IsLLMRequest]
+    def get(self, request, pk: int):
+        pf = Portfolio.objects.filter(user=request.user, pk=pk).first()
+        if not pf:
+            return Response({"error": "Not found"}, status=404)
+        ser = PortfolioWithHoldingsSerializer(pf)  # déjà prêt chez toi :contentReference[oaicite:4]{index=4}
+        # Option : “aplatir”/réduire ici pour un payload minimal
+        return Response(ser.data)
+
+
+
+# views_assist.py (ou dans ton views.py)
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.conf import settings
+import os, asyncio, jwt
+from django.utils.timezone import datetime
+from fastmcp import Client as MCPClient
+from google import genai
+from google.genai import types as gtypes
+import tempfile
+
+@contextmanager
+def temp_environ(updates: dict):
+    """Injecte des variables d'env le temps d'un bloc, puis restaure."""
+    old = {k: os.environ.get(k) for k in updates}
+    os.environ.update({k: v for k, v in updates.items() if v is not None})
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None: os.environ.pop(k, None)
+            else: os.environ[k] = v
+
+def _mint_tool_token(user_id: int, scope=("portfolio:read","news:read"), ttl_s=90) -> str:
+    claims = {
+        "sub": str(user_id),
+        "aud": "llm",
+        "scope": list(scope),
+        "exp": datetime.now() + timedelta(seconds=ttl_s),
+    }
+    print(f"claims {claims}")
+    print(f"secret{settings.SECRET_KEY}")
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm="HS256")
+
+class AssistBriefView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # par défaut: 7 jours / 50 titres / FR
+        since_hours = int(request.data.get("since_hours", 168))
+        limit       = int(request.data.get("limit", 50))
+        lang        = request.data.get("lang", "fr")
+        risk        = request.data.get("risk_profile", "prudent")
+
+        tool_token = _mint_tool_token(request.user.id)
+        model_key  = os.getenv("LLM_MODEL_KEY", "CHANGE_ME")
+
+        SYSTEM = f"""
+Tu es un analyste crypto rigoureux.
+Tu n'as accès qu'à des **titres + liens + sources** (aucun contenu d'article).
+Procède ainsi :
+1) Appelle **recent_article_titles** avec (since_hours={since_hours}, limit={limit}, lang="{lang}").
+2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
+3) Produis un brief **Markdown** :
+   # Brief marché (dernières {since_hours//24}j)
+   ## Thèmes clés (avec 1–2 bullets chacun)
+   ## Liste des articles (titre + [lien]) — max {limit}
+   ## Conseils prudents (3 max) — basés sur les tendances des TITRES uniquement
+Règles :
+- Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des TITRES suggère.
+- Mentionne la **source** (nom du média si disponible) et le **lien**.
+- Français, concis, pas de promesses.
+"""
+
+        USER_MSG = (
+            f"Analyse les actualités crypto des {since_hours//24} derniers jours à partir des TITRES "
+            f"(max {limit}, lang={lang}) et propose 3 conseils prudents adaptés à un profil {risk}. "
+            f"Retourne uniquement du Markdown."
+        )
+
+        async def _run():
+            mcp = MCPClient("mcp_server.py")  # Chemin vers le serveur MCP ci-dessus
+            gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
+            async with mcp:
+                # Initialiser l'auth côté MCP (hors LLM)
+                await mcp.call_tool("_auth_set", {"tool_token": tool_token, "model_key": model_key})
+
+                # Réponse Markdown (tools activés)
+                resp = await gem.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=USER_MSG,
+                    config=gtypes.GenerateContentConfig(
+                        system_instruction=SYSTEM,
+                        tools=[mcp.session],
+                        temperature=0.2,
+                        max_output_tokens=1800,
+                    ),
+                )
+                return (resp.text or "").strip()
+
+        markdown = asyncio.run(_run())
+        return Response({"markdown": markdown})
+    
+
+
+class AssistChatView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        msg   = (request.data.get("message") or "").strip()
+        hist  = request.data.get("history") or []  # liste de textes libres (optionnel)
+        lang  = (request.data.get("lang") or "fr").strip()
+        risk  = (request.data.get("risk_profile") or "prudent").strip()
+
+        if not msg:
+            return Response({"markdown": "_(Écris un message pour démarrer la discussion.)_"}, status=200)
+
+        tool_token = _mint_tool_token(request.user.id)
+        model_key  = os.getenv("LLM_MODEL_KEY", "CHANGE_ME")
+
+        # Contexte utilisateur minimal (sans s’alourdir)
+        context = f"(Langue: {lang} | Profil de risque: {risk})"
+        history_text = ""
+        if hist:
+            # Concaténation simple pour rester léger (tu pourras passer à un vrai historique multi-tour plus tard)
+            history_text = "\n".join(f"- {t}" for t in hist[-8:])  # garde max 8 tours
+
+        USER_MSG = (
+            f"{context}\n"
+            f"Historique (facultatif):\n{history_text}\n\n"
+            f"Question de l’utilisateur:\n{msg}\n\n"
+            f"Réponds en Markdown. Utilise des outils MCP si nécessaire."
+        )
+
+        async def _run():
+            mcp = MCPClient("mcp_server.py")   # ← ton serveur MCP (avec _auth_set, recent_article_titles, etc.)
+            gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
+            async with mcp:
+                # Initialiser l’auth côté MCP (hors LLM)
+                await mcp.call_tool("_auth_set", {"tool_token": tool_token, "model_key": model_key})
+
+                # LLM avec tools génériques
+                resp = await gem.aio.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=USER_MSG,
+                    config=gtypes.GenerateContentConfig(
+                        system_instruction=ASSISTANT_POLICY,
+                        tools=[mcp.session],
+                        temperature=0.2,
+                        max_output_tokens=1400,
+                    ),
+                )
+                return (resp.text or "").strip()
+
+        markdown = asyncio.run(_run())
+        return Response({"markdown": markdown})
