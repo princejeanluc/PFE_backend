@@ -178,12 +178,14 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
+CORS_ALLOW_CREDENTIALS = True 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
+    os.getenv("FRONTEND_ENDPOINT"),
 ]
 
 AUTH_USER_MODEL = 'core.PosaUser'
 
+DISPOSABLE_EMAIL_DOMAINS="gmail.com,yahoo.com,yahoo.fr"
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -196,6 +198,14 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "300/hour",
+        "user": "300/hour",
+    },
 }
 REST_USE_JWT = True 
 

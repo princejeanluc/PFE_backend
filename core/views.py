@@ -707,7 +707,7 @@ class RiskSimulationView(APIView):
 
         # 5) format de réponse
         t0 = df_hourly.index[-1]
-        forecast_index = pd.date_range(t0 + pd.Timedelta(hours=1), periods=horizon_hours, freq="1H")
+        forecast_index = pd.date_range(t0 + pd.Timedelta(hours=1), periods=horizon_hours, freq="1h")
 
         history_payload = build_history_for_response(df_hourly, keep_last_hours=24*3)
 
@@ -929,7 +929,7 @@ Règles :
 
                 # Réponse Markdown (tools activés)
                 resp = await gem.aio.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=USER_MSG,
                     config=gtypes.GenerateContentConfig(
                         system_instruction=SYSTEM,
@@ -983,7 +983,7 @@ class AssistChatView(APIView):
 
                 # LLM avec tools génériques
                 resp = await gem.aio.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-2.0-flash",
                     contents=USER_MSG,
                     config=gtypes.GenerateContentConfig(
                         system_instruction=ASSISTANT_POLICY,

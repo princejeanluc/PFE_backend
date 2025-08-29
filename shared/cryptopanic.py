@@ -132,7 +132,7 @@ def scroll_and_collect(driver, articles_seen, news_list):
             datetime_str = datetime_el.get_attribute("datetime") if datetime_el else None
 
             source_el = art.find_element(By.CSS_SELECTOR, ".si-source-domain")
-            source = source_el.text if source_el else None
+            source = source_el.text if source_el else "Cryptopanic"
 
             cryptos = [
                 c.text for c in art.find_elements(By.CSS_SELECTOR, ".nc-currency a.colored-link") if c.text
@@ -170,3 +170,5 @@ def fetch_news_from_cryptopanic():
     print(f"{len(news_list)} articles traités pour enregistrement ... ")
 
 
+if __name__ == "__main__":
+    fetch_news_from_cryptopanic()

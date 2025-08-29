@@ -1,6 +1,8 @@
 # serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+
+from core.utils.email_check import is_disposable, is_valid_syntax, mx_exists, normalize_email
 from .models import Crypto, CryptoInfo, New, PortfolioPerformance, Prediction, Portfolio, Holding, MarketSnapshot, StressScenario
 from core.constants import PREDICTION_MODELS
 # Utilisateur personnalisé
@@ -16,6 +18,37 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = get_user_model().objects.create_user(**validated_data)
         return user
+    
+    def validate(self, attrs):
+        # 1) normaliser
+        email = normalize_email(attrs.get("email"))
+        username = (attrs.get("username") or "").strip()
+
+        # 2) syntaxe
+        if not is_valid_syntax(email):
+            raise serializers.ValidationError({"email": "Adresse e-mail invalide."})
+
+        # 3) domaine jetable
+        if is_disposable(email):
+            raise serializers.ValidationError({"email": "Adresse e-mail non autorisée."})
+
+        # 4) MX DNS
+        domain = email.split("@")[-1]
+        if not mx_exists(domain):
+            raise serializers.ValidationError({"email": "Domaine e-mail injoignable (MX introuvable)."})
+
+        # 5) unicité case-insensitive
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError({"email": "Un compte existe déjà avec cet e-mail."})
+
+        # (option) unicité username
+        if User.objects.filter(username__iexact=username).exists():
+            raise serializers.ValidationError({"username": "Nom d'utilisateur déjà pris."})
+
+        # remets la version normalisée
+        attrs["email"] = email
+        attrs["username"] = username
+        return attrs
 class PosaUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
