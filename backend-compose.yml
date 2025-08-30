@@ -13,6 +13,8 @@ services:
         gunicorn backend.wsgi:application --bind 0.0.0.0:8000
     ports: ["9092:8000"]
     env_file: [".env"]
+    environment:
+      - PYTHONPATH=/app
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
 
   mcp:
@@ -23,7 +25,10 @@ services:
     command: ["python", "mcp_server.py"]
     ports: ["8765:8765"]        # garde un port MCP unique et stable
     env_file: [".env"]
+    environment:
+      - PYTHONPATH=/app
     depends_on: ["web"]
+    
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
 
   scraper:
@@ -45,5 +50,7 @@ services:
             schedule.run_pending()
             time.sleep(60)
     env_file: [".env"]
+    environment:
+      - PYTHONPATH=/app
     depends_on: ["web"]
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
