@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import t as student , genpareto
 
-from core.lib.garch import MixtureParams, NGARCHMixMLE, TailParams, build_continuous_student_gpd_mixture
+from core.libs.garch import MixtureParams, NGARCHMixMLE, TailParams, build_continuous_student_gpd_mixture
 
 @dataclass
 class RiskSimParams:

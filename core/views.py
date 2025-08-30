@@ -9,7 +9,7 @@ from rest_framework.pagination import PageNumberPagination
 from core.business.market.manager import MarketInfoManager
 from core.business.risk.pricing import OptionPricingParams, price_option_mc
 from core.business.simulation.allocation import create_performance_series, initialize_quantities, run_markowitz_allocation
-from core.lib.policy import ASSISTANT_POLICY
+from core.libs.policy import ASSISTANT_POLICY
 from core.paginations import CryptoPagination
 from .models import Crypto, CryptoInfo, MarketSnapshot, Portfolio, Holding, New, Prediction, StressScenario
 from .serializers import (
