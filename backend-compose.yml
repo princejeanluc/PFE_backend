@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: django_backend
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn backend.wsgi:application --bind 0.0.0.0:8000"
+    ports:
+      - "9092:8000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: mcp_server
+    command: python mcp_server.py
+    ports:
+      - "8765:8765"   # Port libre pour MCP
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      - web
+
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: crypto_scraper
+    command: python -u -c "import time, schedule, subprocess; \
+      import os; \
+      def job(): subprocess.run(['python', 'launch_task_cryptopanic.py'], cwd='/app'); \
+      schedule.every().hour.do(job); \
+      job(); \
+      while True: schedule.run_pending() or time.sleep(60)"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    depends_on:
+      - web
