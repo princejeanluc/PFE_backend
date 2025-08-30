@@ -68,4 +68,8 @@ def _debug_auth():
     return {"has_token": bool(_AUTH["tool_token"]), "model_key": bool(_AUTH["model_key"])}
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="http",
+    host="0.0.0.0",           # Bind to all interfaces
+    port=1445,                # Custom port
+    log_level="DEBUG",        # Override global log level
+    )

@@ -24,7 +24,7 @@ services:
     container_name: mcp_server
     command: python mcp_server.py
     ports:
-      - "8765:8765"   # Port libre pour MCP
+      - "1445:1445"   # Port libre pour MCP
     env_file:
       - .env
     volumes:

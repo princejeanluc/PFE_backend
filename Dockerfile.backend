@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+# Installer dépendances système
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+
+# Préparer l'environnement
+WORKDIR /app
+
+# Installer dépendances Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier le projet
+COPY . .
+
+# Variables d'env Django / Selenium
+ENV PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=config.settings \
+    CHROME_BIN=/usr/bin/chromium \
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver

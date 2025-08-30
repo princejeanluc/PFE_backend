@@ -921,7 +921,7 @@ Règles :
         )
 
         async def _run():
-            mcp = MCPClient("mcp_server.py")  # Chemin vers le serveur MCP ci-dessus
+            mcp = MCPClient(os.getenv("MCP_SERVER_HOST"))  # Chemin vers le serveur MCP ci-dessus
             gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
             async with mcp:
                 # Initialiser l'auth côté MCP (hors LLM)
@@ -975,7 +975,7 @@ class AssistChatView(APIView):
         )
 
         async def _run():
-            mcp = MCPClient("mcp_server.py")   # ← ton serveur MCP (avec _auth_set, recent_article_titles, etc.)
+            mcp = MCPClient(os.getenv("MCP_SERVER_HOST"))   # ← ton serveur MCP (avec _auth_set, recent_article_titles, etc.)
             gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
             async with mcp:
                 # Initialiser l’auth côté MCP (hors LLM)
