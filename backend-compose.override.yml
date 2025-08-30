@@ -1,0 +1,7 @@
+services:
+  web:
+    volumes: ["./:/app"]
+  mcp:
+    volumes: ["./:/app"]
+  scraper:
+    volumes: ["./:/app"]

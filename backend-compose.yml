@@ -1,5 +1,3 @@
-version: "3.11"
-
 services:
   web:
     build:
@@ -13,12 +11,9 @@ services:
         python manage.py migrate &&
         python manage.py collectstatic --noinput &&
         gunicorn backend.wsgi:application --bind 0.0.0.0:8000
-    ports:
-      - "9092:8000"
-    env_file:
-      - .env
-    volumes:
-      - .:/app
+    ports: ["9092:8000"]
+    env_file: [".env"]
+    # volumes: ["./:/app"]  <-- ENLEVER en PROD
 
   mcp:
     build:
@@ -26,14 +21,10 @@ services:
       dockerfile: Dockerfile.backend
     container_name: mcp_server
     command: ["python", "mcp_server.py"]
-    ports:
-      - "1445:1445"   # Port libre pour MCP
-    env_file:
-      - .env
-    volumes:
-      - .:/app
-    depends_on:
-      - web
+    ports: ["8765:8765"]        # garde un port MCP unique et stable
+    env_file: [".env"]
+    depends_on: ["web"]
+    # volumes: ["./:/app"]  <-- ENLEVER en PROD
 
   scraper:
     build:
@@ -53,9 +44,6 @@ services:
         while True:
             schedule.run_pending()
             time.sleep(60)
-    env_file:
-      - .env
-    volumes:
-      - .:/app
-    depends_on:
-      - web
+    env_file: [".env"]
+    depends_on: ["web"]
+    # volumes: ["./:/app"]  <-- ENLEVER en PROD

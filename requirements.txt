@@ -129,6 +129,7 @@ sortedcontainers==2.4.0
 soupsieve==2.8
 spark-parser==1.8.9
 sqlparse==0.5.3
+schedule>=1.2.0
 sse-starlette==3.0.2
 starlette==0.47.3
 statsmodels==0.14.5
