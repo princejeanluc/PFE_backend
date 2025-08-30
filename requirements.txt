@@ -106,7 +106,7 @@ python-slugify==8.0.4
 python3-openid==3.2.0
 pytrends==4.9.2
 pytz==2025.2
-pywin32==311
+pywin32==311; sys_platform == "win32"
 PyYAML==6.0.2
 referencing==0.36.2
 regex==2025.7.34
