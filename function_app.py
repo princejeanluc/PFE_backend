@@ -20,12 +20,12 @@ def action(myTimer: func.TimerRequest) -> None:
         logging.info(" Fin de la mise à jour mi-horaire des cryptos")
     except Exception as e: 
         logging.info(f"Une erreur est survenue lors de la mise à jour des cryptos : {e}")
-    try  :
-        logging.info("Lancement de la mise à jour des news")
-        fetch_news_from_cryptopanic()
-        logging.info("Fin de la mise à jour des news")
-    except Exception as e: 
-        logging.info(f"Une erreur est survenue lors de la mise à jour des news : {e}")
+    #try  :
+        #logging.info("Lancement de la mise à jour des news")
+        #fetch_news_from_cryptopanic()
+        #logging.info("Fin de la mise à jour des news")
+    #except Exception as e: 
+        #logging.info(f"Une erreur est survenue lors de la mise à jour des news : {e}")
     
     #try  :
         #logging.info("Lancement de la mise à jour de la variable exogène 'intérêt'")

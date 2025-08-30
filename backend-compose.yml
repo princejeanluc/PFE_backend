@@ -53,4 +53,35 @@ services:
     environment:
       - PYTHONPATH=/app
     depends_on: ["web"]
+  periodic_worker:
+      build:
+        context: .
+        dockerfile: Dockerfile.backend
+      container_name: periodic_worker
+      command:
+        - python
+        - -u
+        - -c
+        - |
+          import os, time, schedule, subprocess, traceback, datetime as dt
+          TARGET = os.getenv("PERIODIC_SCRIPT", "worker.py")
+          def log(msg): print(f"[{dt.datetime.utcnow().isoformat()}Z] {msg}", flush=True)
+          def job():
+              try:
+                  log(f"Running {TARGET} ...")
+                  r = subprocess.run(['python', TARGET], cwd='/app', check=True)
+                  log(f"Done {TARGET} (rc={r.returncode})")
+              except Exception:
+                  log("ERROR:\n" + traceback.format_exc())
+          schedule.every(30).minutes.do(job)   # ← toutes les 30 minutes
+          job()                                 # premier run immédiat (optionnel)
+          while True:
+              schedule.run_pending()
+              time.sleep(30)
+      env_file: [".env"]
+      environment:
+        - PYTHONPATH=/app
+        # Optionnel: définir le fichier à exécuter sans modifier le compose
+        - PERIODIC_SCRIPT=worker.py
+      depends_on: ["web"]
     # volumes: ["./:/app"]  <-- ENLEVER en PROD

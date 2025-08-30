@@ -5,3 +5,5 @@ services:
     volumes: ["./:/app"]
   scraper:
     volumes: ["./:/app"]
+  periodic_worker:
+    volumes: ["./:/app"]
