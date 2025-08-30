@@ -1,8 +1,8 @@
 import logging
 from shared.db import init_django
+init_django()
 from shared.market_snapshot import make_market_snapshot
 from shared.prediction import predict_all_cryptos
-init_django()
 
 if __name__ =="__main__":
     try  :
