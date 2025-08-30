@@ -56,6 +56,9 @@ from core.business.risk.stress import apply_stress_to_portfolio
 from core.constants import PREDICTION_MODELS
 from django.db.models import OuterRef, Subquery
 from core.mcp.config import mcp_config
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
