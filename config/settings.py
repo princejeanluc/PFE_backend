@@ -224,6 +224,7 @@ SIMPLE_JWT = {
 }
 
 STATIC_ROOT = "static"
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 ALLOWED_HOSTS = [
     '127.0.0.1',  # For local development
