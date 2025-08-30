@@ -55,6 +55,7 @@ from core.business.risk.simulate import (
 from core.business.risk.stress import apply_stress_to_portfolio
 from core.constants import PREDICTION_MODELS
 from django.db.models import OuterRef, Subquery
+from core.mcp.config import mcp_config
 
 class RegisterView(generics.CreateAPIView):
     queryset = get_user_model().objects.all()
@@ -921,7 +922,7 @@ Règles :
         )
 
         async def _run():
-            mcp = MCPClient(os.getenv("MCP_SERVER_HOST"))  # Chemin vers le serveur MCP ci-dessus
+            mcp = MCPClient(mcp_config)  # Chemin vers le serveur MCP ci-dessus
             gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
             async with mcp:
                 # Initialiser l'auth côté MCP (hors LLM)
@@ -975,7 +976,7 @@ class AssistChatView(APIView):
         )
 
         async def _run():
-            mcp = MCPClient(os.getenv("MCP_SERVER_HOST"))   # ← ton serveur MCP (avec _auth_set, recent_article_titles, etc.)
+            mcp = MCPClient(mcp_config)   # ← ton serveur MCP (avec _auth_set, recent_article_titles, etc.)
             gem = genai.Client(api_key=os.getenv("GOOGLE_AI_API_KEY"))
             async with mcp:
                 # Initialiser l’auth côté MCP (hors LLM)
