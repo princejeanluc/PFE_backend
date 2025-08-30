@@ -179,10 +179,13 @@ SOCIALACCOUNT_PROVIDERS = {
 }
 
 CORS_ALLOW_CREDENTIALS = True 
+CORS_ALLOW_ALL_ORIGINS = True
+
+"""
 CORS_ALLOWED_ORIGINS = [
     os.getenv("FRONTEND_ENDPOINT"),
 ]
-
+"""
 AUTH_USER_MODEL = 'core.PosaUser'
 
 DISPOSABLE_EMAIL_DOMAINS="gmail.com,yahoo.com,yahoo.fr"
