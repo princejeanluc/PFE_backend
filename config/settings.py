@@ -223,7 +223,7 @@ SIMPLE_JWT = {
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',          # Nom du header
 }
 
-STATIC_ROOT = "static"
+STATIC_ROOT = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 ALLOWED_HOSTS = [
