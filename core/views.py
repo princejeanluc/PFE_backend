@@ -984,7 +984,6 @@ class AssistChatView(APIView):
             async with mcp:
                 # Initialiser l’auth côté MCP (hors LLM)
                 await mcp.call_tool("_auth_set", {"tool_token": tool_token, "model_key": model_key})
-
                 # LLM avec tools génériques
                 resp = await gem.aio.models.generate_content(
                     model="gemini-2.0-flash",

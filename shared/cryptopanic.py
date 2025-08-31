@@ -83,7 +83,7 @@ def store_articles(articles: list[dict]) -> int:
             continue
 
         # Source
-        source_name = (art.get("source") or "Unknown").strip()
+        source_name = (art.get("source") or "cryptopanic.com").strip()
         if not source_name.startswith("http"):
             source_url = f"https://{source_name}"
         else:
