@@ -61,7 +61,21 @@ def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "
         })
     return out
 
-
+@mcp.tool(name="get_market_metrics", description="Retourne les métriques récentes sur le comportement du marché (volatilité, concentration, volume, etc.)")
+def get_market_metrics() -> list[dict]:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
+        r = cx.get(f"{API_BASE}/market/indicators/")
+        r.raise_for_status()
+        return r.json()
+    results = []
+    for ind in r:
+        results.append({
+                    "indicator": ind.name,
+                    "indicatorValue": ind.value,
+                    "message": ind.message,
+                    "colorFlag": ind.flag,
+                })
+    return results
     
 
 

@@ -57,7 +57,8 @@ from core.constants import PREDICTION_MODELS
 from django.db.models import OuterRef, Subquery
 from core.mcp.config import mcp_config
 from dotenv import load_dotenv
-
+import os
+ASYNC_TIMEOUT = int(os.getenv("ASSIST_TIMEOUT_S", "25"))
 load_dotenv()
 
 class RegisterView(generics.CreateAPIView):
@@ -997,5 +998,9 @@ class AssistChatView(APIView):
                 )
                 return (resp.text or "").strip()
 
-        markdown = asyncio.run(_run())
+        try:
+            markdown = asyncio.run(asyncio.wait_for(_run(), timeout=ASYNC_TIMEOUT))
+        except asyncio.TimeoutError:
+            return Response({"markdown": "_(Désolé, le moteur a mis trop de temps. Réessayez.)_"}, status=504)
         return Response({"markdown": markdown})
+    
