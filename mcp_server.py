@@ -62,21 +62,30 @@ def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "
     return out
 
 @mcp.tool(name="get_market_metrics", description="Retourne les métriques récentes sur le comportement du marché (volatilité, concentration, volume, etc.)")
-def get_market_metrics():
+def get_market_metrics() -> list[dict]:
     with httpx.Client(timeout=15, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/market/indicators/")
         r.raise_for_status()
         return r.json()
+    results = []
+    for ind in r:
+        results.append({
+                    "indicator": ind.name,
+                    "indicatorValue": ind.value,
+                    "message": ind.message,
+                    "colorFlag": ind.flag,
+                })
+    return results
+    
 
 
-# (debug optionnel)
 @mcp.tool
 def _debug_auth():
     return {"has_token": bool(_AUTH["tool_token"]), "model_key": bool(_AUTH["model_key"])}
 
 if __name__ == "__main__":
     mcp.run(transport="http",
-    host="127.0.0.1",           # Bind to all interfaces
-    port=1445,                # Custom port
-    log_level="DEBUG",        # Override global log level
+    host="127.0.0.1", 
+    port=1445,
+    log_level="DEBUG",
     )
