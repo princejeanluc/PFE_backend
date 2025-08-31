@@ -69,7 +69,7 @@ def _debug_auth():
 
 if __name__ == "__main__":
     mcp.run(transport="http",
-    host="0.0.0.0",           # Bind to all interfaces
+    host="127.0.0.1",           # Bind to all interfaces
     port=1445,                # Custom port
     log_level="DEBUG",        # Override global log level
     )
