@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile.backend
     container_name: mcp_server
     command: ["python", "mcp_server.py"]
-    ports: ["8765:8765"]        # garde un port MCP unique et stable
+    ports: ["1445:1445"]        # garde un port MCP unique et stable
     env_file: [".env"]
     environment:
       - PYTHONPATH=/app
