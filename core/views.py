@@ -852,6 +852,12 @@ class LLMPortfolioSummary(APIView):
         # Option : “aplatir”/réduire ici pour un payload minimal
         return Response(ser.data)
 
+class LLMMarketMetrics(APIView):
+    permission_classes = [IsLLMRequest]
+    def get(self, request):
+        manager = MarketInfoManager()
+        data = manager.get_all_indicators()
+        return Response(data)
 
 
 # views_assist.py (ou dans ton views.py)
