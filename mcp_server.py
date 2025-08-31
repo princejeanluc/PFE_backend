@@ -2,7 +2,7 @@
 import os, httpx
 from fastmcp import FastMCP
 
-API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000/api")
+API_BASE = os.getenv("API_BASE", "http://web:8000/api")
 mcp = FastMCP(name="posamcp")
 
 # Mémoire process-locale (propre à CE serveur MCP)
