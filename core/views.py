@@ -847,7 +847,7 @@ class LLMPortfolioSummary(APIView):
         pf = Portfolio.objects.filter(user=request.user, pk=pk).first()
         if not pf:
             return Response({"error": "Not found"}, status=404)
-        ser = PortfolioWithHoldingsSerializer(pf)  # déjà prêt chez toi :contentReference[oaicite:4]{index=4}
+        ser = PortfolioWithHoldingsSerializer(pf)  # déjà prêt chez toi 
         # Option : “aplatir”/réduire ici pour un payload minimal
         return Response(ser.data)
 

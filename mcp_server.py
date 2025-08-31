@@ -25,21 +25,21 @@ def _headers() -> dict:
         "X-Tool-Token": _AUTH["tool_token"] or "",
     }
 
-@mcp.tool
+@mcp.tool(description="récupérer la liste des portefeuilles de l'utilisateur")
 def list_portfolios():
     with httpx.Client(timeout=15, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/llm/portfolios/list/")
         r.raise_for_status()
         return r.json()
 
-@mcp.tool
+@mcp.tool(description="Donne les informations sur un portefeuille à partir de son identifiant")
 def portfolio_summary(portfolio_id: int):
     with httpx.Client(timeout=20, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/llm/portfolio/{portfolio_id}/summary/")
         r.raise_for_status()
         return r.json()
 
-@mcp.tool
+@mcp.tool(description="retourne la liste des articles récents, leur date de publication et leur titre")
 def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "fr") -> list[dict]:
     """
     Retourne uniquement (title, url, source, published_at) pour limiter les tokens.
@@ -60,6 +60,14 @@ def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "
             "published_at": it.get("datetime") or it.get("published_at"),
         })
     return out
+
+@mcp.tool(description="renvoi les métriques sur le comportement récent du marché ")
+def get_market_metrics()->list[dict]:
+    with httpx.Client(timeout=15, headers=_headers()) as cx:
+        r = cx.get(f"{API_BASE}/market/indicators/")
+        r.raise_for_status()
+        items = r.json()
+    return items
 
 
 # (debug optionnel)
