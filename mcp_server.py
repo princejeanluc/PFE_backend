@@ -85,7 +85,7 @@ def _debug_auth():
 
 if __name__ == "__main__":
     mcp.run(transport="http",
-    host="127.0.0.1", 
+    host="0.0.0.0", 
     port=1445,
     log_level="DEBUG",
     )
