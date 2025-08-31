@@ -27,14 +27,14 @@ def _headers() -> dict:
 
 @mcp.tool(description="récupérer la liste des portefeuilles de l'utilisateur")
 def list_portfolios():
-    with httpx.Client(timeout=15, headers=_headers()) as cx:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/llm/portfolios/list/")
         r.raise_for_status()
         return r.json()
 
 @mcp.tool(description="Donne les informations sur un portefeuille à partir de son identifiant")
 def portfolio_summary(portfolio_id: int):
-    with httpx.Client(timeout=20, headers=_headers()) as cx:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/llm/portfolio/{portfolio_id}/summary/")
         r.raise_for_status()
         return r.json()
@@ -45,7 +45,7 @@ def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "
     Retourne uniquement (title, url, source, published_at) pour limiter les tokens.
     Wrappe: GET {API_BASE}/news/latest/?limit=&since_hours=&lang=
     """
-    with httpx.Client(timeout=15, headers=_headers()) as cx:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/news/latest/", params={
             "limit": limit, "since_hours": since_hours, "lang": lang
         })
@@ -63,7 +63,7 @@ def recent_article_titles(limit: int = 50, since_hours: int = 168, lang: str = "
 
 @mcp.tool(name="get_market_metrics", description="Retourne les métriques récentes sur le comportement du marché (volatilité, concentration, volume, etc.)")
 def get_market_metrics() -> list[dict]:
-    with httpx.Client(timeout=15, headers=_headers()) as cx:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/market/indicators/")
         r.raise_for_status()
         return r.json()
