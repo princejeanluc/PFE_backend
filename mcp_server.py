@@ -26,8 +26,8 @@ def _headers() -> dict:
         "X-Tool-Token": _AUTH["tool_token"] or "",
     }
 
-@mcp.tool
-def get_time_nom()->str:
+@mcp.tool(description="donne l'instant actuelle , utile pour comparer des éléments en prenant l'aspect emporelle")
+def get_time_now()->str:
     return f"il est {datetime.now()}"
 
 @mcp.tool(description="récupérer la liste des portefeuilles de l'utilisateur")
