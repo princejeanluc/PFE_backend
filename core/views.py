@@ -910,14 +910,15 @@ class AssistBriefView(APIView):
 
         SYSTEM = f"""
 Tu es un analyste crypto rigoureux.
-Tu n'as accès qu'à des **titres + liens + sources** (aucun contenu d'article).
+Tu n'as accès qu'à des **titres + liens ** provenant de cryptopanic.com (aucun contenu d'article).
 Procède ainsi :
-1) Appelle **recent_article_titles** avec (since_hours={since_hours}, limit={limit}, lang="{lang}").
+
+1) utilise les outils à ta disposition voila quelque paramètre voulu (since_hours={since_hours}, limit={limit}, lang="{lang}").
 2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
 3) Produis un brief **Markdown** pas juste des listes mais un argumentaire structuré en prenant en compte :
-   # Brief marché (dernières {since_hours//24}j)
+   # l'actualité récente (dernières {since_hours//24}j)
    ## Thèmes clés (avec 1–2 bullets chacun)
-   ## Argumente tes dires par les articles (titre + [lien]) — max {limit}
+   ## Argumente tes dires par les articles récent en donnant leur liens et parution — max {limit}
    ## Conseils prudents (3 max) — basés sur les tendances des TITRES uniquement
 Règles :
 - Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des évènement/news TITRES suggère.
