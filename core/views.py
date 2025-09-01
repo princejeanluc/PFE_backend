@@ -914,14 +914,14 @@ Tu n'as accès qu'à des **titres + liens + sources** (aucun contenu d'article).
 Procède ainsi :
 1) Appelle **recent_article_titles** avec (since_hours={since_hours}, limit={limit}, lang="{lang}").
 2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
-3) Produis un brief **Markdown** :
+3) Produis un brief **Markdown** pas juste des listes mais un argumentaire structuré en prenant en compte :
    # Brief marché (dernières {since_hours//24}j)
    ## Thèmes clés (avec 1–2 bullets chacun)
-   ## Liste des articles (titre + [lien]) — max {limit}
+   ## Argumente tes dires par les articles (titre + [lien]) — max {limit}
    ## Conseils prudents (3 max) — basés sur les tendances des TITRES uniquement
 Règles :
-- Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des TITRES suggère.
-- Mentionne la **source** (nom du média si disponible) et le **lien**.
+- Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des évènement/news TITRES suggère.
+- Mentionne  le **lien** et les instants de parutions.
 - Français, concis, pas de promesses.
 """
 
@@ -946,7 +946,7 @@ Règles :
                         system_instruction=SYSTEM,
                         tools=[mcp.session],
                         temperature=0.2,
-                        max_output_tokens=1800,
+                        max_output_tokens=2500,
                     ),
                 )
                 return (resp.text or "").strip()
@@ -999,7 +999,7 @@ class AssistChatView(APIView):
                         system_instruction=ASSISTANT_POLICY,
                         tools=[mcp.session],
                         temperature=0.2,
-                        max_output_tokens=1400,
+                        max_output_tokens=2500,
                     ),
                 )
                 return (resp.text or "").strip()
