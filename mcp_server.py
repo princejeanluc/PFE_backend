@@ -1,5 +1,6 @@
 # mcp_server.py
 import os, httpx
+from datetime import datetime
 from fastmcp import FastMCP
 
 API_BASE = os.getenv("API_BASE", "http://web:8000/api")
@@ -24,6 +25,10 @@ def _headers() -> dict:
         "X-Model-Key": _AUTH["model_key"] or os.getenv("LLM_MODEL_KEY", "CHANGE_ME"),
         "X-Tool-Token": _AUTH["tool_token"] or "",
     }
+
+@mcp.tool
+def get_time_nom()->str:
+    return f"il est {datetime.now()}"
 
 @mcp.tool(description="récupérer la liste des portefeuilles de l'utilisateur")
 def list_portfolios():
