@@ -951,7 +951,10 @@ Règles :
                 )
                 return (resp.text or "").strip()
 
-        markdown = asyncio.run(_run())
+        try:
+            markdown = asyncio.run(asyncio.wait_for(_run(), timeout=ASYNC_TIMEOUT))
+        except asyncio.TimeoutError:
+            return Response({"markdown": "_(Désolé, le moteur a mis trop de temps. Réessayez.)_"}, status=504)
         return Response({"markdown": markdown})
     
 
