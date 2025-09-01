@@ -58,7 +58,7 @@ from django.db.models import OuterRef, Subquery
 from core.mcp.config import mcp_config
 from dotenv import load_dotenv
 import os
-ASYNC_TIMEOUT = int(os.getenv("ASSIST_TIMEOUT_S", "25"))
+ASYNC_TIMEOUT = int(os.getenv("ASSIST_TIMEOUT_S", "60"))
 load_dotenv()
 
 class RegisterView(generics.CreateAPIView):
