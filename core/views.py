@@ -891,8 +891,8 @@ def _mint_tool_token(user_id: int, scope=("portfolio:read","news:read"), ttl_s=9
         "scope": list(scope),
         "exp": datetime.now() + timedelta(seconds=ttl_s),
     }
-    print(f"claims {claims}")
-    print(f"secret{settings.SECRET_KEY}")
+    #print(f"claims {claims}")
+    #print(f"secret{settings.SECRET_KEY}")
     return jwt.encode(claims, settings.SECRET_KEY, algorithm="HS256")
 
 class AssistBriefView(APIView):
@@ -913,7 +913,7 @@ Tu es un analyste crypto rigoureux.
 Tu n'as accès qu'à des **titres + liens ** provenant de cryptopanic.com (aucun contenu d'article).
 Procède ainsi :
 
-1) tu peux analyser en utilisant les outils à ta disposition").
+1) tu peux analyser en utilisant les outils à ta disposition comme recent_article_titles.
 2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
 3) Produis un brief **Markdown** pas juste des listes mais un argumentaire structuré en prenant en compte :
    # l'actualité récente 
