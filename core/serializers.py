@@ -109,7 +109,7 @@ class HoldingSerializer(serializers.ModelSerializer):
 class MarketSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
         model = MarketSnapshot
-        fields = ['id', 'timestamp', 'crypto', 'price', 'volume', 'market_cap']
+        fields = ['id', 'timestamp', 'crypto', 'price', 'volume']
 
 
 def _safe_key(model_name: str) -> str:
