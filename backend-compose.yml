@@ -13,9 +13,18 @@ services:
         gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 4 --timeout 60 --graceful-timeout 30 --keep-alive 5
     ports: ["9092:8000"]
     env_file: [".env"]
-    environment:
+    enviroonment:
       - PYTHONPATH=/app
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.django_backend.rule=Host(`api-posa.princejeanluc.work`)"
+      - "traefik.http.routers.django_backend.entrypoints=websecure"
+      - "traefik.http.routers.django_backend.tls=true"
+      - "traefik.http.routers.django_backend.tls.certresolver=le"
+      - "traefik.http.services.django_backend.loadbalancer.server.port=8000"
 
   mcp:
     build:
@@ -85,3 +94,7 @@ services:
         - PERIODIC_SCRIPT=worker.py
       depends_on: ["web"]
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
+
+networks:
+  web:
+    external: true
