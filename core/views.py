@@ -925,7 +925,7 @@ Règles :
 - Mentionne  le **lien** et les instants de parutions.
 - Français, concis, pas de promesses.
 """
-
+        print(f"mcp_config ",mcp_config)
         USER_MSG = (
             f"Analyse les actualités crypto récentes des {since_hours//24} derniers jours à partir des TITRES "
             f"(max {limit}, lang={lang}) et propose 3 conseils prudents adaptés à un profil {risk}. "
