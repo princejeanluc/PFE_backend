@@ -165,7 +165,8 @@ class NewViewSet(viewsets.ModelViewSet):
 
     @action(detail=False,methods=['get'], url_path='latest', permission_classes=[permissions.AllowAny])
     def latest_news(self,request):
-        news = New.objects.order_by('-datetime')[:int(request.GET.get("limit"))]
+        limit = request.GET.get("limit") or 5
+        news = New.objects.order_by('-datetime')[:int(limit)]
         serialized = NewSerializer(news, many=True)
         return Response(serialized.data)
     
