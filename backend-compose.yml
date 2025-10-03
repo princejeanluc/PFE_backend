@@ -37,6 +37,8 @@ services:
     environment:
       - PYTHONPATH=/app
     depends_on: ["web"]
+    networks:
+      - web
     
     # volumes: ["./:/app"]  <-- ENLEVER en PROD
 
