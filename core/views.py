@@ -222,7 +222,8 @@ class PortfolioViewSet(viewsets.ModelViewSet):
     def simulate_portfolio(self, request, pk=None):
         portfolio = self.get_queryset().get(pk=pk)
         # lance le job et répond tout de suite
-        Thread(target=_simulate_job, args=(portfolio.id,), daemon=True).start()
+        _simulate_job(portfolio.id)
+        #Thread(target=_simulate_job, args=(portfolio.id,), daemon=True).start()
         return Response({"detail": "Simulation démarrée", "status": "running"}, status=202)
     
     @action(detail=True, methods=["get"], url_path="crypto-returns", permission_classes=[permissions.IsAuthenticated])
