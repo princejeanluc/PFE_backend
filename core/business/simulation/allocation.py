@@ -3,6 +3,8 @@
 from core.models import Crypto, CryptoInfo, Holding, Portfolio, PortfolioPerformance
 from django.utils.timezone import now , make_aware
 from datetime import timedelta , datetime
+from django.db import transaction
+from math import sqrt
 import pandas as pd
 import numpy as np
 import cvxpy as cp
@@ -207,78 +209,182 @@ def run_markowitz_allocation(portfolio: Portfolio):
 def safe(x):
     return None if pd.isna(x) else float(x)
 
+EPS = 1e-12
+
+def safe_float(x):
+    try:
+        return float(x)
+    except Exception:
+        return None
+
 def create_performance_series(portfolio):
     """
-    Supprime les performances existantes et crée une nouvelle série horaire
-    basée sur les valeurs simulées du portefeuille.
+    Version optimisée :
+    - lecture limitée des prix par crypto (fenêtre start..final_dt)
+    - pivot unique en DataFrame horaires
+    - calcul vectoriel des métriques (expanding / cumsum)
+    - bulk_create pour écrire en base
     """
+
     # 0. Nettoyage
     PortfolioPerformance.objects.filter(portfolio=portfolio).delete()
 
-    # 1. Paramètres de la simulation
+    # 1. Paramètres
     start_dt = make_aware(datetime.combine(portfolio.holding_start, datetime.min.time()))
     end_dt = make_aware(datetime.combine(portfolio.holding_end, datetime.max.time()))
     now_dt = now()
     final_dt = min(end_dt, now_dt)
 
-    # 2. Récupérer tous les prix agrégés par heure sur la période pour les cryptos du portefeuille
-    symbols = [h.crypto.symbol for h in portfolio.holdings.all()]
-    price_data = {}
-    for h in portfolio.holdings.all():
-        infos = CryptoInfo.objects.filter(
-            crypto=h.crypto,
-            timestamp__gte=start_dt - timedelta(hours=1),  # marge de sécurité
-            timestamp__lte=final_dt
-        ).order_by("timestamp")
+    # Récupérer symboles et holdings en une fois
+    holdings_qs = list(portfolio.holdings.select_related("crypto").all())
+    if not holdings_qs:
+        print("Aucun holding pour ce portefeuille.")
+        return
 
-        if not infos.exists():
+    symbols = [h.crypto.symbol for h in holdings_qs]
+
+    # 2. Charger les séries horaires pour toutes les cryptos (une requête par crypto)
+    #    -> si tu as MarketSnapshot (horaire), prefère l'utiliser ici.
+    price_series = {}
+    for h in holdings_qs:
+        # Filtre SQL limité à la fenêtre utile
+        qs = CryptoInfo.objects.filter(
+            crypto=h.crypto,
+            timestamp__gte=start_dt - timedelta(hours=1),
+            timestamp__lte=final_dt,
+            current_price__isnull=False
+        ).order_by("timestamp").values_list("timestamp", "current_price")
+
+        rows = list(qs)
+        if not rows:
             continue
 
-        df = pd.DataFrame.from_records([
-            {"timestamp": i.timestamp, "price": i.current_price} for i in infos if i.current_price
-        ])
+        df = pd.DataFrame(rows, columns=["timestamp", "price"])
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df.set_index("timestamp", inplace=True)
-        df = df.resample("1h").median().dropna()
-        price_data[h.crypto.symbol] = df["price"]
+        df = df.set_index("timestamp").sort_index()
 
-    if not price_data:
+        # Resample horaire médiane (si tes données sont déjà horaires, c'est quasi no-op)
+        df = df.resample("1H").median().dropna()
+        price_series[h.crypto.symbol] = df["price"]
+
+    if not price_series:
         print("Pas de données de prix disponibles.")
         return
 
-    df_prices = pd.DataFrame(price_data).dropna()
+    # Construire dataframe large (index=timestamp, colonnes=symbol)
+    df_prices = pd.DataFrame(price_series).dropna().sort_index()
+    if df_prices.empty:
+        print("Pas assez de données horaires synchrones.")
+        return
 
-    # 3. Calculer la valeur du portefeuille à chaque heure
-    holdings = {h.crypto.symbol: h for h in portfolio.holdings.all()}
-    df_value = pd.DataFrame()
-    df_value['value'] = df_prices.apply(
-        lambda row: sum(
-            holdings[sym].quantity * row[sym] for sym in df_prices.columns
-        ), axis=1
-    )
+    # 3. Calculer la valeur du portefeuille vectorisée
+    # holdings_map : symbol -> quantity
+    holdings_map = {h.crypto.symbol: float(h.quantity) for h in holdings_qs}
+    # S'assurer que toutes colonnes ont un holding
+    used_symbols = [c for c in df_prices.columns if c in holdings_map]
+    df_prices = df_prices[used_symbols]
 
-    # 4. Calculer les rendements log
-    df_value['log_return'] = np.log(df_value['value'] / df_value['value'].shift(1))
-    df_value.dropna(inplace=True)
+    # multiply each column by quantity
+    for sym in used_symbols:
+        df_prices[sym] = df_prices[sym] * holdings_map[sym]
 
-    # 5. Création des performances
-    for timestamp, row in df_value.iterrows():
-        history = df_value[df_value.index <= timestamp]
-        values = history['value']
-        returns = history['log_return']
-        performance = PortfolioPerformance(
+    df_value = pd.DataFrame(index=df_prices.index)
+    df_value["value"] = df_prices.sum(axis=1)
+
+    # 4. Rendements log (horaire)
+    df_value["log_return"] = np.log(df_value["value"] / df_value["value"].shift(1))
+    df_value = df_value.dropna()
+    if df_value.empty:
+        print("Pas de rendements calculables.")
+        return
+
+    # 5. Vectorisation des métriques cumulatives (expanding)
+    returns = df_value["log_return"]
+
+    # cumul mean and std (expanding)
+    cum_mean = returns.expanding().mean()
+    cum_std = returns.expanding().std(ddof=0)  # ddof=0 pour population-like
+
+    # sharpe (mean/std), safe handling
+    sharpe = (cum_mean / cum_std).replace([np.inf, -np.inf], np.nan)
+
+    # cumulative return relative au premier point
+    first_val = df_value["value"].iloc[0]
+    cumulative_return = df_value["value"] / (first_val + EPS) - 1.0
+
+    # drawdown = current / running_max - 1
+    running_max = df_value["value"].cummax()
+    drawdown = df_value["value"] / (running_max + EPS) - 1.0
+
+    # Value at Risk (expanding quantile 5%)
+    try:
+        var05 = returns.expanding().quantile(0.05)
+    except Exception:
+        # fallback: compute using rolling-ish approach (slower) or set NaN
+        var05 = pd.Series(index=returns.index, data=np.nan)
+
+    # Expected Shortfall (ES): cumulative mean of negative returns
+    neg_vals = returns.where(returns < 0, 0.0)
+    neg_sum_cum = neg_vals.cumsum()
+    neg_count_cum = (returns < 0).cumsum()
+    expected_shortfall = (neg_sum_cum / (neg_count_cum.replace(0, np.nan))).fillna(np.nan)
+
+    # Downside std: compute cumulative sum of squares for negatives and derive std
+    neg_sq = (returns.where(returns < 0, 0.0) ** 2)
+    neg_sq_cum = neg_sq.cumsum()
+    # variance = E[X^2] - mean^2 on negatives
+    neg_mean = expected_shortfall  # already mean of negatives
+    downside_var = (neg_sq_cum / neg_count_cum.replace(0, np.nan)) - (neg_mean ** 2)
+    downside_var = downside_var.clip(lower=0.0)
+    downside_std = np.sqrt(downside_var).replace([np.inf, -np.inf], np.nan)
+
+    # Information ratio: here on cumulative basis same as sharpe (can be adapted)
+    information_ratio = sharpe
+
+    # sortino = mean / downside_std (safe)
+    sortino = (cum_mean / downside_std).replace([np.inf, -np.inf], np.nan)
+
+    # 6. Préparer les objets PortfolioPerformance (bulk create)
+    objs = []
+    # iterate index once (once) to build instances
+    # récupérer la classe locale
+    PP = PortfolioPerformance
+    for ts in df_value.index:
+        val = safe_float(df_value.at[ts, "value"])
+        if val is None:
+            continue
+        # fetch vector metrics at ts
+        cr = safe_float(cumulative_return.at[ts]) if ts in cumulative_return.index else None
+        vol = safe_float(cum_std.at[ts]) if ts in cum_std.index else None
+        sr = safe_float(sharpe.at[ts]) if ts in sharpe.index else None
+        dd = safe_float(drawdown.at[ts]) if ts in drawdown.index else None
+        sot = safe_float(sortino.at[ts]) if ts in sortino.index else None
+        es = safe_float(expected_shortfall.at[ts]) if ts in expected_shortfall.index else None
+        varv = safe_float(var05.at[ts]) if ts in var05.index else None
+        ir = safe_float(information_ratio.at[ts]) if ts in information_ratio.index else None
+
+        p = PP(
             portfolio=portfolio,
-            timestamp=timestamp,
-            value=safe(row['value']),
-            cumulative_return=safe((row['value'] / df_value['value'].iloc[0]) - 1),
-            volatility=safe(returns.std() if len(returns) > 1 else None),
-            sharpe_ratio=safe(returns.mean() / returns.std()) if len(returns) > 1 and returns.std() != 0 else None,
-            drawdown=safe((row['value'] / values.cummax().loc[timestamp]) - 1),
-            sortino_ratio=safe(returns.mean() / returns[returns < 0].std()) if len(returns[returns < 0]) > 0 else None,
-            expected_shortfall=safe(returns[returns < 0].mean()) if len(returns[returns < 0]) > 0 else None,
-            value_at_risk=safe(returns.quantile(0.05)),
-            information_ratio=safe(returns.mean() / returns.std()) if len(returns) > 1 and returns.std() != 0 else None
+            timestamp=ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts,
+            value=val,
+            cumulative_return=cr,
+            volatility=vol,
+            sharpe_ratio=sr,
+            drawdown=dd,
+            sortino_ratio=sot,
+            expected_shortfall=es,
+            value_at_risk=varv,
+            information_ratio=ir
         )
-        performance.save()
+        objs.append(p)
 
-    print(f"{len(df_value)} performances créées pour le portefeuille {portfolio.name}")
+    if not objs:
+        print("Aucun enregistrement de performance à créer.")
+        return
+
+    # 7. Bulk create with transaction for safety
+    BATCH = 1000
+    with transaction.atomic():
+        PortfolioPerformance.objects.bulk_create(objs, batch_size=BATCH)
+
+    print(f"{len(objs)} performances créées pour le portefeuille {portfolio.name}")
