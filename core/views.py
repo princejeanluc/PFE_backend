@@ -621,7 +621,7 @@ class CryptoMapView(APIView):
         X_scaled = scaler.fit_transform(X)
 
         # UMAP: 2D, voisins par défaut OK (données agrégées)
-        reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=15, min_dist=0.1)
+        reducer = umap.UMAP(n_components=2, random_state=42, n_neighbors=5, min_dist=0.1)
         embedding = reducer.fit_transform(X_scaled)
 
         clustering = DBSCAN(eps=0.7, min_samples=3).fit(embedding)

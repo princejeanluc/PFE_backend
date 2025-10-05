@@ -156,15 +156,12 @@ def run_markowitz_allocation(portfolio: Portfolio):
     end_date = now()
     start_date = end_date - timedelta(days=PERIOD_DAY)
     crypto_ids = portfolio.holdings.values_list("crypto__id", flat=True)
-    print("cryptoId", crypto_ids)
     cryptos = Crypto.objects.filter(id__in=crypto_ids)
-    print("cryptos", cryptos)
     infos = CryptoInfo.objects.filter(
         crypto__in=cryptos,
         timestamp__range=(start_date, end_date),
         current_price__isnull=False
     ).order_by("timestamp")
-    print("infos",infos)
     # Construction du DataFrame brut
     records = [
         {"timestamp": info.timestamp, "symbol": info.crypto.symbol, "price": info.current_price}
