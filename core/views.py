@@ -1,6 +1,7 @@
 # views.py
 from contextlib import contextmanager
 from datetime import timedelta
+import logging
 from threading import Thread
 from rest_framework import viewsets, permissions, generics, filters
 from rest_framework.decorators import action
@@ -172,8 +173,8 @@ class NewViewSet(viewsets.ModelViewSet):
     
 def _simulate_job(portfolio_id: int):
     cache.set(f"pf:{portfolio_id}:status", "running", 3600)
-    from core.models import Portfolio
     portfolio = Portfolio.objects.get(pk=portfolio_id)
+    logging.info(f"On simule le portfolio {portfolio_id}")
     try:
         if portfolio.allocation_type == "autom":
             run_markowitz_allocation(portfolio)
@@ -183,8 +184,9 @@ def _simulate_job(portfolio_id: int):
             return
 
         initialize_quantities(portfolio)
+        logging.info(f"quantité initialisé pour  {portfolio_id}")
         create_performance_series(portfolio)
-
+        logging.info(f"performance créer pour  {portfolio_id}")
         cache.set(f"pf:{portfolio_id}:status", "ready", 3600)
     except Exception as e:
         cache.set(f"pf:{portfolio_id}:status", f"error: {e}", 600)
