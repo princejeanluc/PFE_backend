@@ -5,6 +5,7 @@ from django.utils.timezone import now , make_aware
 from datetime import timedelta , datetime
 from django.db import transaction
 from math import sqrt
+import logging
 import pandas as pd
 import numpy as np
 import cvxpy as cp
@@ -225,7 +226,7 @@ def create_performance_series(portfolio):
     - calcul vectoriel des métriques (expanding / cumsum)
     - bulk_create pour écrire en base
     """
-
+    logging.info("La création des performances a commencé")
     # 0. Nettoyage
     PortfolioPerformance.objects.filter(portfolio=portfolio).delete()
 
