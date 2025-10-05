@@ -189,6 +189,7 @@ def _simulate_job(portfolio_id: int):
         logging.info(f"performance créer pour  {portfolio_id}")
         cache.set(f"pf:{portfolio_id}:status", "ready", 3600)
     except Exception as e:
+        raise e
         cache.set(f"pf:{portfolio_id}:status", f"error: {e}", 600)
 
 class PortfolioViewSet(viewsets.ModelViewSet):
