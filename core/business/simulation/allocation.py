@@ -233,6 +233,7 @@ def to_nullable_number(x):
     if math.isnan(xf) or math.isinf(xf):
         return None
     return xf
+
 def create_performance_series(portfolio):
     """
     Version optimisée :
@@ -372,18 +373,18 @@ def create_performance_series(portfolio):
     # récupérer la classe locale
     PP = PortfolioPerformance
     for ts in df_value.index:
-        val = safe_float(df_value.at[ts, "value"])
+        val = to_nullable_number(df_value.at[ts, "value"])
         if val is None:
             continue
         # fetch vector metrics at ts
-        cr = safe_float(cumulative_return.at[ts]) if ts in cumulative_return.index else None
-        vol = safe_float(cum_std.at[ts]) if ts in cum_std.index else None
-        sr = safe_float(sharpe.at[ts]) if ts in sharpe.index else None
-        dd = safe_float(drawdown.at[ts]) if ts in drawdown.index else None
-        sot = safe_float(sortino.at[ts]) if ts in sortino.index else None
-        es = safe_float(expected_shortfall.at[ts]) if ts in expected_shortfall.index else None
-        varv = safe_float(var05.at[ts]) if ts in var05.index else None
-        ir = safe_float(information_ratio.at[ts]) if ts in information_ratio.index else None
+        cr = to_nullable_number(cumulative_return.at[ts]) if ts in cumulative_return.index else None
+        vol = to_nullable_number(cum_std.at[ts]) if ts in cum_std.index else None
+        sr = to_nullable_number(sharpe.at[ts]) if ts in sharpe.index else None
+        dd = to_nullable_number(drawdown.at[ts]) if ts in drawdown.index else None
+        sot = to_nullable_number(sortino.at[ts]) if ts in sortino.index else None
+        es = to_nullable_number(expected_shortfall.at[ts]) if ts in expected_shortfall.index else None
+        varv = to_nullable_number(var05.at[ts]) if ts in var05.index else None
+        ir = to_nullable_number(information_ratio.at[ts]) if ts in information_ratio.index else None
 
         p = PP(
             portfolio=portfolio,
