@@ -327,7 +327,7 @@ def create_performance_series(portfolio):
     # cumulative return relative au premier point
     first_val = df_value["value"].iloc[0]
     cumulative_return = df_value["value"] / (first_val + EPS) - 1.0
-    cumulative_return = cumulative_return.fillna(method=0)  # rien
+    cumulative_return = cumulative_return.fillna(0)  # rien
     # forcer le premier point si il est NaN
     if not pd.isna(cumulative_return.iloc[0]):
         pass
