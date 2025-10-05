@@ -280,7 +280,7 @@ def create_performance_series(portfolio):
         df = df.set_index("timestamp").sort_index()
 
         # Resample horaire médiane (si tes données sont déjà horaires, c'est quasi no-op)
-        df = df.resample("1H").median().dropna()
+        df = df.resample("1h").median().dropna()
         price_series[h.crypto.symbol] = df["price"]
 
     if not price_series:
@@ -327,7 +327,7 @@ def create_performance_series(portfolio):
     # cumulative return relative au premier point
     first_val = df_value["value"].iloc[0]
     cumulative_return = df_value["value"] / (first_val + EPS) - 1.0
-    cumulative_return = cumulative_return.fillna(method=None)  # rien
+    cumulative_return = cumulative_return.fillna(method=0)  # rien
     # forcer le premier point si il est NaN
     if not pd.isna(cumulative_return.iloc[0]):
         pass
@@ -336,6 +336,7 @@ def create_performance_series(portfolio):
     # drawdown = current / running_max - 1
     running_max = df_value["value"].cummax()
     drawdown = df_value["value"] / (running_max + EPS) - 1.0
+    
 
     # Value at Risk (expanding quantile 5%)
     try:
