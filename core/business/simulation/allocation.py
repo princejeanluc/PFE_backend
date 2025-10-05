@@ -1,5 +1,6 @@
 # core.business.simulation.allocation
 
+import math
 from core.models import Crypto, CryptoInfo, Holding, Portfolio, PortfolioPerformance
 from django.utils.timezone import now , make_aware
 from datetime import timedelta , datetime
@@ -218,6 +219,20 @@ def safe_float(x):
     except Exception:
         return None
 
+
+def to_nullable_number(x):
+    """
+    Convertit x en float ou None si x est None/NaN/inf ou convert impossible.
+    """
+    if x is None:
+        return None
+    try:
+        xf = float(x)
+    except Exception:
+        return None
+    if math.isnan(xf) or math.isinf(xf):
+        return None
+    return xf
 def create_performance_series(portfolio):
     """
     Version optimisée :
@@ -312,7 +327,12 @@ def create_performance_series(portfolio):
     # cumulative return relative au premier point
     first_val = df_value["value"].iloc[0]
     cumulative_return = df_value["value"] / (first_val + EPS) - 1.0
-
+    cumulative_return = cumulative_return.fillna(method=None)  # rien
+    # forcer le premier point si il est NaN
+    if not pd.isna(cumulative_return.iloc[0]):
+        pass
+    else:
+        cumulative_return.iloc[0] = 0.0
     # drawdown = current / running_max - 1
     running_max = df_value["value"].cummax()
     drawdown = df_value["value"] / (running_max + EPS) - 1.0
