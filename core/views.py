@@ -367,7 +367,7 @@ class MarketIndicatorsView(APIView):
         return Response(data)
     
 class CryptoHistoryView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [any_of(permissions.IsAuthenticated, IsLLMRequest)]
 
     def get(self, request):
         symbol = request.GET.get("symbol")
@@ -417,14 +417,14 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
-# si tu as statsmodels
+
 from statsmodels.tsa.stattools import grangercausalitytests
 
-# ⚠️ utilise MarketSnapshot (déjà horaire) au lieu de CryptoInfo
-from core.models import MarketSnapshot  # adapte l'import
+
+from core.models import MarketSnapshot 
 
 class CryptoRelationMatrixView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [any_of(permissions.IsAuthenticated, IsLLMRequest)]
 
     def get(self, request):
         analysis_type = request.GET.get("type", "spearman")  # "spearman" | "granger"

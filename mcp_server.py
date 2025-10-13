@@ -2,6 +2,11 @@
 import os, httpx
 from datetime import datetime
 from fastmcp import FastMCP
+from typing import Literal
+
+RelationMatrixType = Literal["spearman", "granger"]
+RelationMatrixPeriod = Literal["7d", "14d", "30d"]
+RelationMatrixLag = Literal[1,2,3,4,5]
 
 API_BASE = os.getenv("API_BASE", "http://web:8000/api")
 mcp = FastMCP(name="posamcp")
@@ -82,10 +87,33 @@ def get_market_metrics() -> list[dict]:
                 })
     return results
     
-@mcp.tool(name="get_crypto_map", description="Retourne la cartographie du marché de la crypto en utilisant une réduction de dimension et du clustering")
+@mcp.tool(name="get_crypto_map", 
+          description="Retourne la cartographie du marché de la crypto sur 30 jours en utilisant une réduction de dimension et du clustering, donne des informations marchés et associe les comportements commun par cluster")
 def get_crypto_map() -> dict:
     with httpx.Client(timeout=60, headers=_headers()) as cx:
         r = cx.get(f"{API_BASE}/crypto-map/")
+        r.raise_for_status()
+        return r.json()
+
+
+@mcp.tool(name="get_latest_info", 
+          description="les dernires informations du marché et les prévisions horaires suivantes par les modèles xgboost et GRU. (NB : le modèle GRU est plus stable car il n'explose pas au niveau des pertes)")
+def get_latest_info() -> dict:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
+        r = cx.get(f"{API_BASE}/cryptos/latest-info")
+        r.raise_for_status()
+        return r.json()
+
+
+@mcp.tool(name="get_relation_map", description="Retourne soit la matrice de causalité , soit la matrice de corrélation ('spearman'|'ranger') sur une période (en jour ex: '30d' -> 30 jours) choisi et avec un lag (en heure ex: 1 -> 1h) défini (uniquement pour causalité)")
+def get_relation_map(type:RelationMatrixType , period:RelationMatrixPeriod , lag:RelationMatrixLag) -> dict:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
+        r = cx.get(f"{API_BASE}/crypto-relations/", 
+                   params={
+                       type  :type, 
+                       period: period, 
+                       lag: lag
+                   })
         r.raise_for_status()
         return r.json()
 
