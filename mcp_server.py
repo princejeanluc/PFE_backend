@@ -82,7 +82,12 @@ def get_market_metrics() -> list[dict]:
                 })
     return results
     
-
+@mcp.tool(name="get_crypto_map", description="Retourne la cartographie du marché de la crypto en utilisant une réduction de dimension et du clustering")
+def get_crypto_map() -> dict:
+    with httpx.Client(timeout=60, headers=_headers()) as cx:
+        r = cx.get(f"{API_BASE}/crypto-map/")
+        r.raise_for_status()
+        return r.json()
 
 @mcp.tool
 def _debug_auth():

@@ -542,7 +542,7 @@ class CryptoRelationMatrixView(APIView):
 
     
 class CryptoMapView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsLLMRequest]
 
     def get(self, request):
         # paramètres (bornés)
