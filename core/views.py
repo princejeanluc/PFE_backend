@@ -59,6 +59,13 @@ from django.db.models import OuterRef, Subquery
 from core.mcp.config import mcp_config
 from dotenv import load_dotenv
 import os
+# views_llm.py
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import permissions
+from core.permissions import IsLLMRequest
+from urllib.parse import urlparse
+
 ASYNC_TIMEOUT = int(os.getenv("ASSIST_TIMEOUT_S", "60"))
 load_dotenv()
 
@@ -835,12 +842,7 @@ class StressApplyView(generics.GenericAPIView):
 
 
 
-# views_llm.py
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import permissions
-from core.permissions import IsLLMRequest
-from urllib.parse import urlparse
+
 class LLMListPortfolios(APIView):
     permission_classes = [IsLLMRequest]
     def get(self, request):
