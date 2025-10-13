@@ -1,4 +1,5 @@
 # mcp_server.py
+from enum import IntEnum
 import os, httpx
 from datetime import datetime
 from fastmcp import FastMCP
@@ -6,8 +7,13 @@ from typing import Literal
 
 RelationMatrixType = Literal["spearman", "granger"]
 RelationMatrixPeriod = Literal["7d", "14d", "30d"]
-RelationMatrixLag = Literal[1,2,3,4,5]
-
+class RelationMatrixLag(IntEnum):
+    H1 = 1
+    H2 = 2
+    H3 = 3
+    H4 = 4
+    H5 = 5
+    
 API_BASE = os.getenv("API_BASE", "http://web:8000/api")
 mcp = FastMCP(name="posamcp")
 
@@ -105,17 +111,30 @@ def get_latest_info() -> dict:
         return r.json()
 
 
-@mcp.tool(name="get_relation_map", description="Retourne soit la matrice de causalité , soit la matrice de corrélation ('spearman'|'ranger') sur une période (en jour ex: '30d' -> 30 jours) choisi et avec un lag (en heure ex: 1 -> 1h) défini (uniquement pour causalité)")
-def get_relation_map(type:RelationMatrixType , period:RelationMatrixPeriod , lag:RelationMatrixLag) -> dict:
+
+
+@mcp.tool(name="get_relation_map", description="Retourne soit la matrice de causalité , soit la matrice de corrélation ('spearman'|'granger') sur une période (en jour ex: '30d' -> 30 jours) choisi et avec un lag (en heure ex: 1 -> 1h) défini (uniquement pour causalité)")
+def get_relation_map(matrix_type: RelationMatrixType, period: RelationMatrixPeriod, lag: RelationMatrixLag) -> dict:
+    """
+    matrix_type: 'spearman' or 'granger'
+    period: '7d', '14d', '30d'
+    lag: 1..5 (hours)
+    """
+    # Construire params avec noms littéraux et convertir lag en int si nécessaire
     with httpx.Client(timeout=60, headers=_headers()) as cx:
-        r = cx.get(f"{API_BASE}/crypto-relations/", 
-                   params={
-                       type  :type, 
-                       period: period, 
-                       lag: lag
-                   })
+        r = cx.get(
+            f"{API_BASE}/crypto-relations/",
+            params={
+                "type": matrix_type,
+                "period": period,
+                "lag": int(lag)  # IntEnum -> int
+            }
+        )
         r.raise_for_status()
         return r.json()
+
+
+
 
 @mcp.tool
 def _debug_auth():
