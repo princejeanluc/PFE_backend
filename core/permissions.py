@@ -1,6 +1,7 @@
 # permissions.py
 import os, jwt
 from rest_framework.permissions import BasePermission
+from rest_framework import permissions
 from django.contrib.auth import get_user_model
 from django.conf import settings
 User = get_user_model()
@@ -63,3 +64,46 @@ class IsLLMRequest(BasePermission):
             return False
 
         return True
+    
+
+def any_of(*permission_classes):
+    """
+    Retourne une classe Permission qui autorise si AU MOINS une des
+    permission_classes passées autorise.
+    """
+    class AnyOfPermission(permissions.BasePermission):
+        # stocke les classes pour debug/lecture
+        inner_classes = permission_classes
+
+        def _check(self, method_name, request, view, obj=None):
+            for perm_cls in permission_classes:
+                perm = perm_cls()
+                method = getattr(perm, method_name, None)
+                if method is None:
+                    # si la classe de permission ne définit pas l'appel demandé,
+                    # on considère que c'est autorisé (conservatif) ou on skip.
+                    continue
+                # appelle has_permission ou has_object_permission
+                if obj is None:
+                    if method(request, view):
+                        return True
+                else:
+                    # some permissions only implement has_permission: fallback
+                    try:
+                        if method(request, view, obj):
+                            return True
+                    except TypeError:
+                        # méthode attend seulement (request, view)
+                        if getattr(perm, "has_permission", lambda *_: False)(request, view):
+                            return True
+            return False
+
+        def has_permission(self, request, view):
+            return self._check("has_permission", request, view)
+
+        def has_object_permission(self, request, view, obj):
+            return self._check("has_object_permission", request, view, obj)
+
+    return AnyOfPermission
+
+

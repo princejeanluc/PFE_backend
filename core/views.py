@@ -63,7 +63,7 @@ import os
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
-from core.permissions import IsLLMRequest
+from core.permissions import IsLLMRequest, any_of
 from urllib.parse import urlparse
 
 ASYNC_TIMEOUT = int(os.getenv("ASSIST_TIMEOUT_S", "60"))
@@ -549,7 +549,7 @@ class CryptoRelationMatrixView(APIView):
 
     
 class CryptoMapView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsLLMRequest]
+    permission_classes = [any_of(permissions.IsAuthenticated, IsLLMRequest)]
 
     def get(self, request):
         # paramètres (bornés)
