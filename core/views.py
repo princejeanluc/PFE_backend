@@ -917,26 +917,27 @@ class AssistBriefView(APIView):
 
         SYSTEM = f"""
 Tu es un analyste crypto rigoureux.
-Tu n'as accès qu'à des **titres + liens ** provenant de cryptopanic.com (aucun contenu d'article).
+Tu as accès qu'à des **titres + liens ** provenant de cryptopanic.com (aucun contenu d'article) , des outils pour consulter les valeurs marchés , les articles.
 Procède ainsi :
 
 1) tu peux analyser en utilisant les outils à ta disposition comme recent_article_titles.
 2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
-3) Produis un brief **Markdown** pas juste des listes mais un argumentaire structuré en prenant en compte :
+3) Produis un rapport **Markdown** avec du **html** (pour styliser) , pas juste des listes mais un argumentaire structuré en prenant en compte :
    # l'actualité récente 
    ## Thèmes clés (avec 1–2 bullets chacun)
-   ## Argumente tes dires par les articles récent en donnant leur liens et instant de parution
-   ## Conseils prudents (3 max) — basés sur les tendances des TITRES uniquement
+   ## L'analyse du marché 
+   ## Argumente tes dires par les articles récent en donnant leur liens et instant de parution , mais aussi les données marché.
+   ## Conseils prudents (3 max) — basés sur les tendances des TITRES et donnée marché croisé avec leur temporalité.
 Règles :
-- Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des évènement/news TITRES suggère.
-- Mentionne  le **lien** et les instants de parutions.
+- Pas d'invention : tu ne spécules pas au-delà de ce que la formulation des données te suggère.
+- Mentionne  le **lien** et les instants de parutions et les données nécéssaires.
 - Français, concis, pas de promesses.
 """
         print(f"mcp_config ",mcp_config)
         USER_MSG = (
-            f"Analyse les actualités crypto récentes des {since_hours//24} derniers jours à partir des TITRES "
+            f"Analyse les actualités crypto récentes des {since_hours//24} derniers jours et le marché à partir des inforamtions que tu peux avoir à ta disposition "
             f"(max {limit}, lang={lang}) et propose 3 conseils prudents adaptés à un profil {risk}. "
-            f"Retourne uniquement du Markdown."
+            f"Retourne uniquement du Markdown (avec du html pour enrichir)."
         )
 
         async def _run():
