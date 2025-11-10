@@ -372,8 +372,8 @@ class CryptoHistoryView(APIView):
     def get(self, request):
         symbol = request.GET.get("symbol")
         range = request.GET.get("range", "7d")  # Ex: 1d, 7d, 30d
-        print(f"range = {range}")
-        print(f"symbol{symbol}")
+        # print(f"range = {range}")
+        # print(f"symbol{symbol}")
         if not symbol:
             return Response({"error": "Missing crypto_id"}, status=400)
 
@@ -933,7 +933,7 @@ Règles :
 - Mentionne  le **lien** et les instants de parutions et les données nécéssaires.
 - Français, concis, pas de promesses.
 """
-        print(f"mcp_config ",mcp_config)
+        # print(f"mcp_config ",mcp_config)
         USER_MSG = (
             f"Analyse les actualités crypto récentes des {since_hours//24} derniers jours et le marché à partir des inforamtions que tu peux avoir à ta disposition "
             f"(max {limit}, lang={lang}) et propose 3 conseils prudents adaptés à un profil {risk}. "
