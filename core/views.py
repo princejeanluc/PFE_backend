@@ -922,7 +922,7 @@ Procède ainsi :
 
 1) tu peux analyser en utilisant les outils à ta disposition comme recent_article_titles.
 2) À partir des TITRES uniquement, regroupe par thèmes (réglementaire, ETF, DeFi, L2, hacks, stablecoins, macro…).
-3) Produis un rapport **Markdown** avec du **html** (pour styliser) , pas juste des listes mais un argumentaire structuré en prenant en compte :
+3) Produis un rapport **Markdown** uniquement , pas juste des listes mais un argumentaire structuré en prenant en compte :
    # l'actualité récente 
    ## Thèmes clés (avec 1–2 bullets chacun)
    ## L'analyse du marché 
