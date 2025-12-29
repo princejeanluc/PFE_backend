@@ -949,7 +949,7 @@ Règles :
 
                 # Réponse Markdown (tools activés)
                 resp = await gem.aio.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash-lite",
                     contents=USER_MSG,
                     config=gtypes.GenerateContentConfig(
                         system_instruction=SYSTEM,
